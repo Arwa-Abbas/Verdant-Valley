@@ -8,8 +8,11 @@ import random
 import math
 import sys
 import os
+import re
+import base64
 
 import pygame
+from io import BytesIO
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
@@ -23,6 +26,119 @@ from utils.constants import (
     SEASON_TINTS,
 )
 from utils.helpers import grid_to_px, draw_rounded_rect
+
+
+# ── Asset loading ──────────────────────────────────────────────────────────────
+
+REPO_ROOT = os.path.dirname(
+    os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+)
+STONE_ASSET_PATHS = [
+    os.path.join(REPO_ROOT, "assets", "images", "final_stone.jpg"),
+    os.path.join(REPO_ROOT, "assets", "images", "stones.png"),
+    os.path.join(REPO_ROOT, "assets", "images", "stones.svg"),
+]
+STONE_ASSET = None
+
+
+def _get_stone_asset():
+    """Load and cache the stone tile art from assets/images."""
+    global STONE_ASSET
+
+    if STONE_ASSET is not None:
+        return STONE_ASSET
+
+    for asset_path in STONE_ASSET_PATHS:
+        if not os.path.exists(asset_path):
+            continue
+
+        ext = os.path.splitext(asset_path)[1].lower()
+
+        # Prefer regular bitmap assets when available.
+        if ext in {".jpg", ".jpeg", ".png"}:
+            try:
+                img = pygame.image.load(asset_path)
+                if pygame.display.get_surface() is not None:
+                    img = img.convert_alpha() if ext == ".png" else img.convert()
+                STONE_ASSET = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
+                if _surface_has_visible_pixels(STONE_ASSET):
+                    return STONE_ASSET
+            except Exception:
+                continue
+
+        # SVG fallback path for older assets.
+        try:
+            img = pygame.image.load(asset_path)
+            if pygame.display.get_surface() is not None:
+                img = img.convert_alpha()
+            scaled = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
+            styled = _stylize_stone_asset(scaled)
+            if _surface_has_visible_pixels(styled):
+                STONE_ASSET = styled
+                return STONE_ASSET
+        except Exception:
+            pass
+
+        try:
+            with open(asset_path, "r", encoding="utf-8", errors="replace") as svg_file:
+                svg_text = svg_file.read()
+
+            match = re.search(r"data:image/png;base64,([A-Za-z0-9+/=\n\r]+)", svg_text)
+            if not match:
+                continue
+
+            png_data = base64.b64decode(match.group(1))
+            img = pygame.image.load(BytesIO(png_data), "stones.png")
+            if pygame.display.get_surface() is not None:
+                img = img.convert_alpha()
+            scaled = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
+            styled = _stylize_stone_asset(scaled)
+            if _surface_has_visible_pixels(styled):
+                STONE_ASSET = styled
+                return STONE_ASSET
+        except Exception:
+            continue
+
+    STONE_ASSET = None
+
+    return STONE_ASSET
+
+
+def _surface_has_visible_pixels(surface):
+    """Return True when the surface contains at least one visible pixel."""
+    width, height = surface.get_size()
+    for x in range(width):
+        for y in range(height):
+            if surface.get_at((x, y)).a > 0:
+                return True
+    return False
+
+
+def _stylize_stone_asset(surface):
+    """Remove dark background from the imported asset and tint details as stone."""
+    styled = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+    width, height = surface.get_size()
+
+    for x in range(width):
+        for y in range(height):
+            r, g, b, a = surface.get_at((x, y))
+            if a == 0:
+                continue
+
+            brightness = (r + g + b) // 3
+
+            # Treat near-black pixels as background.
+            if brightness < 24:
+                continue
+
+            # Map visible detail into a stone-gray gradient.
+            shade = max(90, min(220, 90 + int((brightness / 255) * 130)))
+            alpha = max(110, min(255, a))
+            styled.set_at((x, y), (shade, shade, shade, alpha))
+
+    return styled
 
 
 # ── Baked texture data per tile ───────────────────────────────────────────────
@@ -417,54 +533,58 @@ class Grid:
                 pygame.draw.circle(surface, (100, 52, 18), (x + dx, y + dy), 1)
 
         elif t.type == TILE_STONE:
-            for pebble in tx.get("pebbles", []):
-                sx = pebble["x"]
-                sy = pebble["y"]
-                sr = pebble["r"]
-                h_off = pebble["highlight_offset"]
-                s_off = pebble["shadow_offset"]
-                c_var = pebble["color_var"]
-                
-                # Base stone color with variation
-                base = TILE_COLOR[TILE_STONE]
-                stone_color = (
-                    max(40, min(200, base[0] + c_var)),
-                    max(40, min(200, base[1] + c_var)),
-                    max(40, min(200, base[2] + c_var))
-                )
-                
-                # Deep shadow (darkest inner ring)
-                shadow_color = (
-                    max(40, stone_color[0] - 30),
-                    max(40, stone_color[1] - 30),
-                    max(40, stone_color[2] - 30)
-                )
-                pygame.draw.circle(surface, shadow_color, (x + sx + s_off[0], y + sy + s_off[1]), sr + 1)
-                
-                # Main stone body
-                pygame.draw.circle(surface, stone_color, (x + sx, y + sy), sr)
-                
-                # Subtle mid-tone ring for depth
-                mid_color = (
-                    (stone_color[0] + shadow_color[0]) // 2,
-                    (stone_color[1] + shadow_color[1]) // 2,
-                    (stone_color[2] + shadow_color[2]) // 2
-                )
-                pygame.draw.circle(surface, mid_color, (x + sx, y + sy), sr, 1)
-                
-                # Top highlight (bright edge)
-                highlight_color = (
-                    min(255, stone_color[0] + 40),
-                    min(255, stone_color[1] + 40),
-                    min(255, stone_color[2] + 40)
-                )
-                h_size = max(1, sr // 3)
-                pygame.draw.circle(surface, highlight_color, 
-                                 (x + sx + h_off[0], y + sy + h_off[1]), h_size)
-                
-                # Micro-shine dot on highlight
-                pygame.draw.circle(surface, (255, 255, 255),
-                                 (x + sx + h_off[0], y + sy + h_off[1]), max(1, h_size - 1))
+            stone_asset = _get_stone_asset()
+            if stone_asset:
+                surface.blit(stone_asset, (x, y))
+            else:
+                for pebble in tx.get("pebbles", []):
+                    sx = pebble["x"]
+                    sy = pebble["y"]
+                    sr = pebble["r"]
+                    h_off = pebble["highlight_offset"]
+                    s_off = pebble["shadow_offset"]
+                    c_var = pebble["color_var"]
+                    
+                    # Base stone color with variation
+                    base = TILE_COLOR[TILE_STONE]
+                    stone_color = (
+                        max(40, min(200, base[0] + c_var)),
+                        max(40, min(200, base[1] + c_var)),
+                        max(40, min(200, base[2] + c_var))
+                    )
+                    
+                    # Deep shadow (darkest inner ring)
+                    shadow_color = (
+                        max(40, stone_color[0] - 30),
+                        max(40, stone_color[1] - 30),
+                        max(40, stone_color[2] - 30)
+                    )
+                    pygame.draw.circle(surface, shadow_color, (x + sx + s_off[0], y + sy + s_off[1]), sr + 1)
+                    
+                    # Main stone body
+                    pygame.draw.circle(surface, stone_color, (x + sx, y + sy), sr)
+                    
+                    # Subtle mid-tone ring for depth
+                    mid_color = (
+                        (stone_color[0] + shadow_color[0]) // 2,
+                        (stone_color[1] + shadow_color[1]) // 2,
+                        (stone_color[2] + shadow_color[2]) // 2
+                    )
+                    pygame.draw.circle(surface, mid_color, (x + sx, y + sy), sr, 1)
+                    
+                    # Top highlight (bright edge)
+                    highlight_color = (
+                        min(255, stone_color[0] + 40),
+                        min(255, stone_color[1] + 40),
+                        min(255, stone_color[2] + 40)
+                    )
+                    h_size = max(1, sr // 3)
+                    pygame.draw.circle(surface, highlight_color, 
+                                     (x + sx + h_off[0], y + sy + h_off[1]), h_size)
+                    
+                    # Micro-shine dot on highlight
+                    pygame.draw.circle(surface, (255, 255, 255),
+                                     (x + sx + h_off[0], y + sy + h_off[1]), max(1, h_size - 1))
 
         elif t.type == TILE_MUD:
             for streak_x in tx.get("streaks", []):
