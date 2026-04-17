@@ -70,17 +70,14 @@ class WoodButton:
         self.font = pygame.font.Font(None, 32)
 
     def draw(self, screen):
-        # Wood colors (light wood)
         wood_base = (160, 110, 60)
         wood_dark = (130, 85, 45)
         wood_light = (180, 130, 80)
 
         color = wood_light if self.hovered else wood_base
 
-        # Draw wood grain texture
         pygame.draw.rect(screen, color, self.rect, border_radius=12)
 
-        # Add wood grain lines
         for i in range(3):
             line_y = self.rect.y + 15 + i * 15
             pygame.draw.line(
@@ -91,10 +88,8 @@ class WoodButton:
                 1,
             )
 
-        # Draw border
         pygame.draw.rect(screen, (100, 70, 40), self.rect, 2, border_radius=12)
 
-        # Draw text
         text_surf = self.font.render(self.text, True, self.text_color)
         text_rect = text_surf.get_rect(center=self.rect.center)
         screen.blit(text_surf, text_rect)
@@ -222,7 +217,6 @@ class SettingsScreen:
         self.font_text = pygame.font.Font(None, 28)
         self.font_small = pygame.font.Font(None, 20)
 
-        # Load background image for settings
         self.background = BackgroundImage("assets/loading/image.png")
 
         self.back_button = WoodButton(
@@ -247,15 +241,12 @@ class SettingsScreen:
         )
 
     def draw(self):
-        # Draw background image
         self.background.draw(self.screen)
 
-        # Black overlay for text visibility (50% opacity)
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
 
-        # Settings panel
         panel_w = 500
         panel_h = 350
         panel_x = SCREEN_W // 2 - panel_w // 2
@@ -305,10 +296,9 @@ class MainMenu:
     def __init__(self, screen, music_manager):
         self.screen = screen
         self.music_manager = music_manager
-        self.font_title = pygame.font.Font(None, 96)  # Larger font for title
+        self.font_title = pygame.font.Font(None, 96)
         self.font_sub = pygame.font.Font(None, 32)
 
-        # Load video for menu background
         try:
             self.video = VideoLoader("assets/loading/background.mp4")
         except:
@@ -327,7 +317,6 @@ class MainMenu:
         ]
 
     def draw(self):
-        # Draw video background
         if self.video:
             frame = self.video.get_frame()
             if frame:
@@ -335,12 +324,10 @@ class MainMenu:
         else:
             self.screen.fill((18, 26, 18))
 
-        # Lighter overlay (reduced opacity)
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 100))
         self.screen.blit(overlay, (0, 0))
 
-        # Title with shadow effect
         title_shadow = self.font_title.render("VERDANT VALLEY", True, (0, 0, 0))
         title_shadow_rect = title_shadow.get_rect(
             center=(SCREEN_W // 2 + 4, SCREEN_H // 2 - 180 + 4)
@@ -373,7 +360,6 @@ class HowToPlayScreen:
         self.font_title = pygame.font.Font(None, 52)
         self.font_text = pygame.font.Font(None, 22)
 
-        # Load background image for how to play
         self.background = BackgroundImage("assets/loading/image.png")
 
         self.back_button = WoodButton(
@@ -381,10 +367,8 @@ class HowToPlayScreen:
         )
 
     def draw(self):
-        # Draw background image
         self.background.draw(self.screen)
 
-        # Black overlay for text visibility
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
@@ -400,6 +384,7 @@ class HowToPlayScreen:
             "   P - Pause/Resume Game",
             "   ESC - Quit to Main Menu",
             "   R - Restart Game",
+            "   G or Click PLANT button - Plant crops",
             "",
             "AI AGENTS:",
             "   FARMER - Harvests crops using A* pathfinding",
@@ -475,7 +460,6 @@ class EndScreen:
         start_x = (SCREEN_W - total_width) // 2
         y = 200
 
-        # Farmer Card
         farmer_rect = pygame.Rect(start_x, y, card_width, card_height)
         pygame.draw.rect(self.screen, (40, 70, 40), farmer_rect, border_radius=12)
         pygame.draw.rect(self.screen, (100, 180, 255), farmer_rect, 2, border_radius=12)
@@ -488,7 +472,6 @@ class EndScreen:
         self.screen.blit(farmer_score_text, (start_x + 20, y + 60))
         self.screen.blit(farmer_icon, (start_x + card_width - 50, y + 60))
 
-        # Guard Card
         guard_x = start_x + card_width + spacing
         guard_rect = pygame.Rect(guard_x, y, card_width, card_height)
         pygame.draw.rect(self.screen, (40, 70, 40), guard_rect, border_radius=12)
@@ -502,7 +485,6 @@ class EndScreen:
         self.screen.blit(guard_score_text, (guard_x + 20, y + 60))
         self.screen.blit(guard_icon, (guard_x + card_width - 50, y + 60))
 
-        # Animal Card
         animal_x = guard_x + card_width + spacing
         animal_rect = pygame.Rect(animal_x, y, card_width, card_height)
         pygame.draw.rect(self.screen, (40, 70, 40), animal_rect, border_radius=12)
@@ -539,6 +521,7 @@ class Game:
         self.running = True
         self.game_tick = 0
         self.completed_seasons = 0
+        self.plant_button_rect = None
 
         self.music_manager = MusicManager()
         if self.music_manager.load_music("assets/loading/audio.mp3"):
@@ -705,6 +688,43 @@ class Game:
         resume_rect = resume_text.get_rect(center=(SCREEN_W // 2, SCREEN_H // 2 + 30))
         self.screen.blit(resume_text, resume_rect)
 
+    def draw_plant_button(self):
+        """Draw the plant crops button at bottom center"""
+        btn_width = 150
+        btn_height = 45
+        btn_x = SCREEN_W // 2 - btn_width // 2
+        btn_y = SCREEN_H - 55
+        self.plant_button_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
+
+        wood_base = (100, 70, 40)
+        wood_light = (140, 105, 65)
+        mouse_pos = pygame.mouse.get_pos()
+        is_hover = self.plant_button_rect.collidepoint(mouse_pos)
+        btn_color = wood_light if is_hover else wood_base
+
+        pygame.draw.rect(
+            self.screen, btn_color, self.plant_button_rect, border_radius=12
+        )
+        pygame.draw.rect(
+            self.screen, (80, 150, 80), self.plant_button_rect, 2, border_radius=12
+        )
+
+        # Wood grain lines
+        for i in range(2):
+            line_y = btn_y + 15 + i * 18
+            pygame.draw.line(
+                self.screen,
+                (80, 55, 30),
+                (btn_x + 10, line_y),
+                (btn_x + btn_width - 10, line_y),
+                1,
+            )
+
+        btn_font = pygame.font.Font(None, 22)
+        btn_text = btn_font.render("🌱 PLANT CROPS", True, (255, 215, 0))
+        text_rect = btn_text.get_rect(center=self.plant_button_rect.center)
+        self.screen.blit(btn_text, text_rect)
+
     def run(self):
         while self.running:
             self.clock.tick(FPS)
@@ -743,18 +763,30 @@ class Game:
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_p:
                             self.state = "PAUSED"
-                        if event.key == pygame.K_ESCAPE:
+                        elif event.key == pygame.K_ESCAPE:
                             self.init_game()
                             self.state = "MENU"
-                        if event.key == pygame.K_r:
+                        elif event.key == pygame.K_r:
                             self.init_game()
                             self.state = "CSP"
+                        elif event.key == pygame.K_g:
+                            # Press G to plant crops
+                            if self.farmer:
+                                self.farmer.trigger_planting()
+                                print("🌱 Plant crops triggered by G key!")
+
+                    # Check for plant button click
+                    if event.type == pygame.MOUSEBUTTONDOWN and self.plant_button_rect:
+                        if self.plant_button_rect.collidepoint(event.pos):
+                            if self.farmer:
+                                self.farmer.trigger_planting()
+                                print("🌱 Plant crops triggered by button!")
 
                 elif self.state == "PAUSED":
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_p:
                             self.state = "PLAYING"
-                        if event.key == pygame.K_ESCAPE:
+                        elif event.key == pygame.K_ESCAPE:
                             self.init_game()
                             self.state = "MENU"
 
@@ -766,6 +798,7 @@ class Game:
                     elif result == "menu":
                         self.state = "MENU"
 
+            # DRAWING
             if self.state == "MENU":
                 self.menu.draw()
 
@@ -805,6 +838,10 @@ class Game:
                     self.farm_ui.draw(self.screen)
                 self.draw_season_info()
                 self.draw_minimap()
+
+                # Draw plant button
+                self.draw_plant_button()
+
                 for agent in self.agents:
                     if hasattr(agent, "alive") and not agent.alive:
                         continue
@@ -817,6 +854,24 @@ class Game:
                     self.farm_ui.draw(self.screen)
                 self.draw_season_info()
                 self.draw_minimap()
+
+                # Draw plant button (disabled during pause)
+                btn_width = 150
+                btn_height = 45
+                btn_x = SCREEN_W // 2 - btn_width // 2
+                btn_y = SCREEN_H - 55
+                pause_btn_rect = pygame.Rect(btn_x, btn_y, btn_width, btn_height)
+                pygame.draw.rect(
+                    self.screen, (80, 80, 80), pause_btn_rect, border_radius=12
+                )
+                pygame.draw.rect(
+                    self.screen, (100, 100, 100), pause_btn_rect, 2, border_radius=12
+                )
+                btn_font = pygame.font.Font(None, 22)
+                btn_text = btn_font.render("🌱 PLANT CROPS", True, (150, 150, 150))
+                text_rect = btn_text.get_rect(center=pause_btn_rect.center)
+                self.screen.blit(btn_text, text_rect)
+
                 for agent in self.agents:
                     if hasattr(agent, "alive") and not agent.alive:
                         continue

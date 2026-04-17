@@ -1,3 +1,7 @@
+"""
+src/agents/guard.py - Guard Agent with 4x4 Animation
+"""
+
 import random
 from .base_agent import Agent
 from src.algorithms.astar import astar
@@ -6,17 +10,38 @@ from utils.helpers import manhattan
 
 
 class Guard(Agent):
-    """
-    Guard agent.
-    States: 'patrol' — cycles through waypoints using A*
-            'chase'  — chases the nearest animal using A*
-    """
-
     ALERT_RADIUS = 5
     RETURN_RADIUS = 8
 
     def __init__(self, col, row):
-        super().__init__(col, row, C_GUARD, speed=1.8, name="Guard")
+        # Auto-detect frame size
+        import os
+        import pygame
+
+        path = "assets/agents/guard/guard.png"
+        frame_w, frame_h = 16, 16
+
+        if os.path.exists(path):
+            img = pygame.image.load(path)
+            w, h = img.get_size()
+            frame_w = w // 4
+            frame_h = h // 4
+            print(f"✅ Guard sheet: {w}x{h}, frames: {frame_w}x{frame_h}")
+        else:
+            print(f"⚠️ Guard sheet not found at: {path}")
+
+        super().__init__(
+            col,
+            row,
+            C_GUARD,
+            speed=1.8,
+            name="Guard",
+            sprite_sheet_path=path if os.path.exists(path) else None,
+            frame_size=(frame_w, frame_h),
+            animation_rows=4,
+            animation_cols=4,
+            scale=2.5,
+        )
         self.state = "patrol"
         self.waypoints = []
         self.wp_index = 0
@@ -43,10 +68,8 @@ class Guard(Agent):
     def update(self, grid, agents):
         super().update(grid, agents)
         self.replan_cd = max(0, self.replan_cd - 1)
-
         nearest = self._nearest_animal(agents)
 
-        # Chase logic
         if nearest:
             dist = manhattan((self.col, self.row), (nearest.col, nearest.row))
             if dist <= self.ALERT_RADIUS:
@@ -60,7 +83,6 @@ class Guard(Agent):
             if self.replan_cd == 0:
                 self._plan_to(grid, (self.chase_target.col, self.chase_target.row))
                 self.replan_cd = 20
-            # Catch animal
             if (self.col, self.row) == (self.chase_target.col, self.chase_target.row):
                 self.chase_target.caught()
                 self.state = "patrol"
@@ -68,7 +90,6 @@ class Guard(Agent):
                 print("Guard caught the animal!")
             return
 
-        # Patrol logic
         self.state = "patrol"
         if not self.waypoints:
             return
