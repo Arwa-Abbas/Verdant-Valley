@@ -307,6 +307,7 @@ class Game:
 
     def _setup_game(self):
         self.grid = Grid()
+        self.grid.add_house(2, 2)
         self.season = SeasonManager()
         self.farmer, self.guard, self.animal = make_agents(self.grid)
         self.agents = [self.farmer, self.guard, self.animal]
@@ -445,6 +446,7 @@ class Game:
 
         # Grid area
         self.grid.draw(self.screen)
+        self.grid.draw_buildings(self.screen)
 
         # Path overlays
         self.farmer.draw_path_overlay(self.screen, C_PATH_FARMER)

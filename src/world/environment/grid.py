@@ -31,7 +31,57 @@ class Grid:
         self.cols = GRID_COLS
         self.rows = GRID_ROWS
         self.tiles = [[Tile(c, r) for r in range(self.rows)] for c in range(self.cols)]
+
+        # NEW: Add buildings list
+        self.buildings = []
+
+        # NEW: Load house sprite
+        self.house_sprite = None
+        self.load_house_sprite()
+
         self._build_map()
+
+    # NEW: Method to load house sprite
+    def load_house_sprite(self):
+        """Load the house sprite from assets"""
+        try:
+            self.house_sprite = pygame.image.load(
+                "assets/images/buildings/house.png"
+            ).convert_alpha()
+            # Scale to appropriate size (96x96 for 2x2 tiles)
+            self.house_sprite = pygame.transform.scale(self.house_sprite, (96, 96))
+            print("House sprite loaded successfully!")
+        except Exception as e:
+            print(f"Could not load house sprite: {e}")
+            self.house_sprite = None
+
+    # NEW: Method to add house at specific position
+    def add_house(self, col, row):
+        """Add a house at grid position"""
+        self.buildings.append(
+            {"col": col, "row": row, "type": "house", "sprite": self.house_sprite}
+        )
+        print(f"House added at ({col}, {row})")
+
+    # NEW: Method to draw all buildings
+    def draw_buildings(self, surface):
+        """Draw all buildings on top of tiles"""
+        for building in self.buildings:
+            if building["sprite"] is None:
+                continue
+
+            x, y = grid_to_px(building["col"], building["row"])
+
+            # Adjust position for larger sprite (96x96 house on 48x48 grid)
+            sprite_width = building["sprite"].get_width()
+            sprite_height = building["sprite"].get_height()
+
+            if sprite_width > TILE_SIZE:
+                # Center the larger sprite
+                x = x - (sprite_width - TILE_SIZE) // 2
+                y = y - (sprite_height - TILE_SIZE)
+
+            surface.blit(building["sprite"], (x, y))
 
     # ── Map generation ────────────────────────────────────────────────────────
 
