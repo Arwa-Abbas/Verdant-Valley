@@ -66,6 +66,7 @@ class Animal(Agent):
         self.w_crop_value = 1.0
         self.w_guard_avoid = 1.5 if animal_type == "bear" else 1.0
         self._ate_this_tile = False
+        self.season_mgr = None
         self.state = "hungry"  # hungry, scared, wandering
         self.stamina = self.STAMINA_MAX
         self.original_color = color
@@ -109,18 +110,23 @@ class Animal(Agent):
         self.path = []
         print(f"{self.name} was caught!")
 
-    def _is_valid_step(self, tile):
+    def _is_valid_step(self, tile, rain_active=False):
         if tile is None:
             return False
-        return ANIMAL_COSTS.get(tile.type, float("inf")) != float("inf")
+        if tile.type in (TILE_WATER, TILE_STONE, TILE_SNOW_STONE):
+            return False
+        return True
 
     def _can_step(self, grid, col, row):
         """Override: animal cannot step on water, stone, snow_stone."""
-        return self._is_valid_step(grid.get(col, row))
+        tile = grid.get(col, row)
+        rain_active = getattr(self, 'season_mgr', None) is not None and self.season_mgr.rain_active
+        return self._is_valid_step(tile, rain_active)
 
     def _nearest_valid_tile(self, grid, col, row):
         start = grid.get(col, row)
-        if self._is_valid_step(start):
+        rain_active = getattr(self, 'season_mgr', None) is not None and self.season_mgr.rain_active
+        if self._is_valid_step(start, rain_active):
             return col, row
 
         for radius in range(1, 6):
@@ -164,17 +170,18 @@ class Animal(Agent):
             nc = max(0, min(grid.cols - 1, nc))
             nr = max(0, min(grid.rows - 1, nr))
             t = grid.get(nc, nr)
-            if not self._is_valid_step(t):
+            rain_active = getattr(self, 'season_mgr', None) is not None and self.season_mgr.rain_active
+            if not self._is_valid_step(t, rain_active):
                 continue
 
-            result = astar(grid, (self.col, self.row), (nc, nr), cost_dict=ANIMAL_COSTS, agent_type="Animal", rain_active=False)
+            result = astar(grid, (self.col, self.row), (nc, nr), cost_dict=ANIMAL_COSTS, agent_type="Animal", rain_active=rain_active)
             if result.path:
                 self.set_path(result.path)
                 return True
 
         return False
 
-    def _ensure_valid_position(self, grid):
+    def ensure_valid_position(self, grid):
         current_tile = grid.get(self.col, self.row)
         if self._is_valid_step(current_tile):
             return
@@ -248,30 +255,27 @@ class Animal(Agent):
             self._ate_this_tile = False
 
     def _wander(self, grid):
-        """Move to a random nearby tile that the animal can traverse, within farming boundaries."""
-        min_col, max_col = 4, 13
-        min_row, max_row = 2, 11
+        """Move to a random nearby tile that the animal can traverse, using full grid bounds."""
         for _ in range(15):
             nc = self.col + random.randint(-4, 4)
             nr = self.row + random.randint(-4, 4)
-            nc = max(min_col, min(max_col, nc))
-            nr = max(min_row, min(max_row, nr))
+            nc = max(0, min(grid.cols - 1, nc))
+            nr = max(0, min(grid.rows - 1, nr))
             t = grid.get(nc, nr)
-            if not self._is_valid_step(t):
+            rain_active = getattr(self, 'season_mgr', None) is not None and self.season_mgr.rain_active
+            if not self._is_valid_step(t, rain_active):
                 continue
             if (nc, nr) != (self.col, self.row):
-                result = astar(grid, (self.col, self.row), (nc, nr), cost_dict=ANIMAL_COSTS, agent_type="Animal", rain_active=False)
+                result = astar(grid, (self.col, self.row), (nc, nr), cost_dict=ANIMAL_COSTS, agent_type="Animal", rain_active=rain_active)
                 if result.path:
                     self.set_path(result.path, result.explored)
                     return True
         return False
 
     def _flee_from_guard(self, grid, guard):
-        """Move away from the guard, within farming boundaries."""
+        """Move away from the guard, using full grid bounds."""
         if not guard:
             return
-        min_col, max_col = 4, 13
-        min_row, max_row = 2, 11
         # Find direction away from guard
         dx = self.col - guard.col
         dy = self.row - guard.row
@@ -279,11 +283,12 @@ class Animal(Agent):
         dist = max(1, abs(dx) + abs(dy))
         target_col = self.col + int(dx / dist * 5)
         target_row = self.row + int(dy / dist * 5)
-        # Clamp to farming grid
-        target_col = max(min_col, min(max_col, target_col))
-        target_row = max(min_row, min(max_row, target_row))
+        # Clamp to full grid
+        target_col = max(0, min(grid.cols - 1, target_col))
+        target_row = max(0, min(grid.rows - 1, target_row))
         # Try to path to that tile
-        result = astar(grid, (self.col, self.row), (target_col, target_row), cost_dict=ANIMAL_COSTS, agent_type="Animal", rain_active=False)
+        rain_active = getattr(self, 'season_mgr', None) is not None and self.season_mgr.rain_active
+        result = astar(grid, (self.col, self.row), (target_col, target_row), cost_dict=ANIMAL_COSTS, agent_type="Animal", rain_active=rain_active)
         if result.path:
             self.set_path(result.path, result.explored)
         else:
@@ -291,9 +296,11 @@ class Animal(Agent):
             self._wander(grid)
 
     def update(self, grid, agents, season_mgr=None):
+        if season_mgr:
+            self.season_mgr = season_mgr
         if not self.alive:
             return
-        self._ensure_valid_position(grid)
+        self.ensure_valid_position(grid)
         super().update(grid, agents, season_mgr)
         self.replan_cd = max(0, self.replan_cd - 1)
         self.recent_crop_damage_timer = max(0, self.recent_crop_damage_timer - 1)
@@ -335,11 +342,14 @@ class Animal(Agent):
         elif self.state == "hungry":
             target = self._pick_target(grid, agents)
             if target:
-                result = astar(grid, (self.col, self.row), target, cost_dict=ANIMAL_COSTS, agent_type="Animal", rain_active=False)
+                rain_active = getattr(self, 'season_mgr', None) is not None and self.season_mgr.rain_active
+                result = astar(grid, (self.col, self.row), target, cost_dict=ANIMAL_COSTS, agent_type="Animal", rain_active=rain_active)
                 if result.path:
                     self.set_path(result.path, result.explored)
                     self.replan_cd = 60
                 else:
+                    self.state = "wandering"
+                if not result.path:
                     self.state = "wandering"
                     self._plan_wander(grid)
                     self.replan_cd = 45

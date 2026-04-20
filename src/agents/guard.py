@@ -116,8 +116,13 @@ class Guard(Agent):
         return GUARD_COSTS.get(tile.type, float("inf")) != float("inf")
 
     def _can_step(self, grid, col, row):
-        """Override: guard cannot step on water, stone, snow_stone."""
-        return self._is_valid_step(grid.get(col, row))
+        """Override: guard cannot step on water, stone, snow_stone, mud."""
+        tile = grid.get(col, row)
+        if not self._is_valid_step(tile):
+            return False
+        if getattr(tile, 'flooded', False) or getattr(tile, 'muddy', False):
+            return False
+        return True
 
     def _move_cost(self, tile):
         if not self._is_valid_step(tile):

@@ -139,6 +139,8 @@ class Farmer(Agent):
 
         self.target = None
         self.replan_cd = 0
+        self.idle_ticks = 0
+        self.debug_timer = 0
         self.harvest_count = 0
         self.plant_count   = 0
         self.harvested_count = 0
@@ -188,8 +190,13 @@ class Farmer(Agent):
         return tile is not None and FARMER_COSTS.get(tile.type, float('inf')) != float('inf')
 
     def _can_step(self, grid, col, row):
-        """Override: farmer cannot step on water, stone, snow_stone."""
-        return self._tile_passable(grid.get(col, row))
+        """Override: farmer cannot step on water, stone, snow, mud tiles."""
+        tile = grid.get(col, row)
+        if not self._tile_passable(tile):
+            return False
+        if getattr(tile, 'flooded', False) or getattr(tile, 'muddy', False):
+            return False
+        return True
 
     def _ensure_valid_position(self, grid):
         """If farmer is on an impassable tile, teleport to nearest valid one."""
@@ -234,7 +241,7 @@ class Farmer(Agent):
             # Use A* with rain logic to check reachability
             rain_active = season_mgr.rain_active if season_mgr else False
             result = astar(grid, (self.col, self.row), (c, r), agent_type="Farmer", rain_active=rain_active)
-            if not getattr(result, 'path', None):
+            if not getattr(result, 'path', None) or len(result.path) > 20:
                 continue
             value = CROP_VALUE[tile.crop]
             dist  = manhattan((self.col, self.row), (c, r)) + 1
@@ -506,6 +513,21 @@ class Farmer(Agent):
         Agent.update(self, grid, agents, season_mgr)
         self.replan_cd = max(0, self.replan_cd - 1)
 
+        # Debug telemetry
+        self.debug_timer += 1
+        if self.debug_timer % 120 == 0:
+            print(f"[FARMER DEBUG {self.debug_timer//120}] state={self.state}, target={self.target}, path_len={len(self.path) if self.path else 0}, moving={self.moving}, replan_cd={self.replan_cd}, idle_ticks={getattr(self, 'idle_ticks', 0)}")
+
+        # Idle timeout - auto plant if stuck idle too long
+        if self.state == "idle":
+            self.idle_ticks = getattr(self, 'idle_ticks', 0) + 1
+            if self.idle_ticks > 300:
+                print("[FARMER] Idle timeout! Auto-triggering plant...")
+                self._plant_requested = True
+                self.idle_ticks = 0
+        else:
+            self.idle_ticks = 0
+
         if self._failed_plant_timer > 0:
             self._failed_plant_timer -= 1
 
@@ -530,9 +552,9 @@ class Farmer(Agent):
                 self.target = new_target
                 rain_active = season_mgr.rain_active if season_mgr else False
                 path, explored = self._find_path_with_animal_avoidance(grid, agents, self.target, rain_active=rain_active)
-                if path:
+                if path and len(path) <= 20:
                     self.set_path(path, explored)
-                    self.replan_cd = 90
+                    self.replan_cd = 45
                     self.state = "moving"
                 else:
                     self._show_failed_plant(self.target)

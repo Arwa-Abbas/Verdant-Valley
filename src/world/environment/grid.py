@@ -342,6 +342,9 @@ class Tile:
         # Thaw stage: 0=normal, 1=mud_puddle, 2=dirt/mud, 3=restoring
         self._thaw_stage = 0
         self._thaw_timer = 0
+        self._pre_thaw_type: int = -1
+        self.snow_timer = 0
+        self._pre_snow_type = -1
 
         # utility multiplier used by heuristics (0.0 - 1.0)
         self.utility = 1.0
@@ -706,7 +709,7 @@ class Grid:
 
     # ── Rain event ────────────────────────────────────────────────────────────
 
-    def apply_rain(self):
+    def apply_rain(self, season_index=0):
         """
         When rain occurs:
         - mark many tiles wet (t.wet=True)
@@ -715,9 +718,19 @@ class Grid:
         - set sensible flood_timer so tiles auto-unflood after a number of ticks
         """
         new_mud = []
+        rng_snow = random.Random(123)  # semi-deterministic snow
+        snow_count = 0
         for c in range(self.cols):
             for r in range(self.rows):
                 t = self.tiles[c][r]
+                if season_index == 3 and t.type in (TILE_GRASS, TILE_FIELD, TILE_DIRT, TILE_MUD) and snow_count < 20 and rng_snow.random() < 0.25:
+                    t._pre_snow_type = t.type
+                    t.set_type(TILE_WINTER_SNOW)
+                    t.snow_timer = 300  # 5 seconds
+                    t.frozen = True
+                    snow_count += 1
+                    continue
+
                 # mark wet for fields and grass (visual effect & potential utility change)
                 if t.type in (TILE_FIELD, TILE_GRASS, TILE_DIRT, TILE_MUD):
                     t.wet = True
@@ -785,48 +798,40 @@ class Grid:
                         t.set_type(TILE_SNOW_STONE)
 
                 elif t.type in (TILE_FIELD, TILE_GRASS, TILE_DIRT):
-                    # Randomly convert farm tiles to winter snow first.
+                    # Randomly convert farm tiles to winter snow.
                     if rng.random() < 0.35:
                         t._pre_freeze_type = t.type
                         t.crop = CROP_NONE
                         t.crop_stage = 0
                         t.set_type(TILE_WINTER_SNOW)
-                        # Winter_snow then becomes slushy mud/flood terrain.
                         t._winter_slush = True
-                        t.set_type(TILE_MUD)
-                        t.set_muddy(True)
-                        t.set_flooded(True, duration_ticks=SEASON_DURATION)
-                        t.wet = True
+                        # Tile stays as WINTER_SNOW during winter; transitions to mud at season end
 
                 # prune domain for winter
                 t.prune_for_season(3)
 
-    def clear_winter_freeze(self):
-        """Winter end: revert winter-slush/snow tiles to their original regular terrain."""
+    def handle_thaw_end_of_season(self):
+        """Winter end: snow/mud -> mud_puddle (10s timer) -> dirt -> regular."""
         for c in range(self.cols):
             for r in range(self.rows):
                 t = self.tiles[c][r]
                 t.frozen = False
-
                 if t.type == TILE_SNOW_STONE:
                     t.set_type(TILE_STONE)
+                if t._winter_slush or t._pre_freeze_type != -1 or t.type == TILE_WINTER_SNOW or getattr(t, 'snow_timer', 0) > 0:
+                    # Start mud_puddle phase
+                    t._pre_thaw_type = t._pre_freeze_type if t._pre_freeze_type != -1 else t.type
+                    t.set_type(TILE_MUD)
+                    t._thaw_stage = 1
+                    t._thaw_timer = 600  # 10 seconds mud_puddle
+                    t.set_muddy(True)
+                    t.wet = True
+                    t.flooded = False
                     t._pre_freeze_type = -1
                     t._winter_slush = False
-
-                else:
-                    if t._winter_slush and t._pre_freeze_type != -1:
-                        t.set_flooded(False)
-                        t.set_type(t._pre_freeze_type)
-                        t.set_muddy(False)
-                        t.wet = False
-                        t._pre_freeze_type = -1
-                        t._winter_slush = False
-                    elif t._pre_freeze_type != -1:
-                        t.set_type(t._pre_freeze_type)
-                        t._pre_freeze_type = -1
-                        t._winter_slush = False
-                    if not t.flooded:
-                        t.restore_domain()
+                if not t.flooded:
+                    t.restore_domain()
+        self._update_thaw()
 
     def _update_thaw(self):
         """Tick thaw timers: mud_puddle -> dirt/mud -> original type."""
@@ -850,8 +855,10 @@ class Grid:
 
                 elif t._thaw_stage == 2:
                     # Stage 2 done: dirt -> original type
-                    original = t._pre_freeze_type if t._pre_freeze_type is not None else TILE_GRASS
+                    original = getattr(t, '_pre_thaw_type', t._pre_freeze_type if t._pre_freeze_type is not None else TILE_GRASS)
                     t.set_type(original)
+                    if hasattr(t, '_pre_thaw_type'):
+                        delattr(t, '_pre_thaw_type')
                     t._pre_freeze_type = -1
                     t._thaw_stage = 0
                     t._thaw_timer = 0
@@ -875,6 +882,14 @@ class Grid:
         for c in range(self.cols):
             for r in range(self.rows):
                 t = self.tiles[c][r]
+                if getattr(t, "snow_timer", 0) > 0:
+                    t.snow_timer -= 1
+                    if t.snow_timer <= 0:
+                        if t._pre_snow_type != -1:
+                            t.set_type(t._pre_snow_type)
+                            t._pre_snow_type = -1
+                        t.frozen = False
+
                 if getattr(t, "flood_timer", 0):
                     t.flood_timer -= 1
                     if t.flood_timer <= 0 and t.flooded:
@@ -891,6 +906,9 @@ class Grid:
                             t.set_type(TILE_DIRT)
                         t.set_muddy(False)
                         t.wet = False
+
+        # Tick thaw timers every game frame so mud_puddle -> dirt -> regular
+        self._update_thaw()
 
         # Prune per-tile domains for time-of-day and season if requested
         for c in range(self.cols):

@@ -516,9 +516,16 @@ class Game:
             self.farmer = Farmer(6, 6)
             if self.farmer and self.grid:
                 self.farmer._ensure_valid_position(self.grid)
+                print(f"[INIT] Farmer spawned at ({self.farmer.col}, {self.farmer.row})")
+                print(f"[INIT] Tile valid: {self.grid.get(self.farmer.col, self.farmer.row) is not None if self.grid else 'no grid'}")
             self.guard  = Guard(10, 10, C_GUARD)
             if self.guard and self.grid:
                 self.guard.ensure_valid_position(self.grid)
+
+            if self.animal_bear and self.grid:
+                self.animal_bear.ensure_valid_position(self.grid)
+            if self.animal_rabbit and self.grid:
+                self.animal_rabbit.ensure_valid_position(self.grid)
 
             self.animal_bear   = Animal(16, 1, animal_type="bear")
             if self.animal_bear and self.grid:

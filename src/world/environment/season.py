@@ -69,7 +69,7 @@ class SeasonManager:
     def trigger_rain(self, grid):
         self.rain_active = True
         self.rain_timer = 10 * FPS  # 10 seconds of rain
-        grid.apply_rain()
+        grid.apply_rain(self.index)
 
     def advance_manual(self, grid):
         """Manually force the next season while preserving runtime flow."""
@@ -95,7 +95,7 @@ class SeasonManager:
         if self.name == "❄️ Winter":
             grid.apply_winter_freeze()
         else:
-            grid.clear_winter_freeze()
+            grid.handle_thaw_end_of_season()
 
     def _update_day_night(self):
         if self.day_night_cycle <= 0:

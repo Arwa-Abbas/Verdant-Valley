@@ -348,12 +348,12 @@ class CSPSolver:
         print(f"Solving CSP for {len(self.vars)} field tiles...")
         print(
             "Requested crops: "
-            f"Wheat={requested[CROP_WHEAT]}, "
-            f"Sunflower={requested[CROP_SUNFLOWER]}, "
-            f"Corn={requested[CROP_CORN]}, "
-            f"Tomato={requested[CROP_TOMATO]}, "
-            f"Carrot={requested[CROP_CARROT]}, "
-            f"Potato={requested[CROP_POTATO]}"
+            f"Wheat={requested.get(CROP_WHEAT, 0)}, "
+            f"Sunflower={requested.get(CROP_SUNFLOWER, 0)}, "
+            f"Corn={requested.get(CROP_CORN, 0)}, "
+            f"Tomato={requested.get(CROP_TOMATO, 0)}, "
+            f"Carrot={requested.get(CROP_CARROT, 0)}, "
+            f"Potato={requested.get(CROP_POTATO, 0)}"
         )
 
         edge_tiles = [v for v in self.vars if self._is_edge(v[0], v[1])]
@@ -369,7 +369,7 @@ class CSPSolver:
         dry_inner = [v for v in inner_tiles if v not in near_water_inner and self._is_available(v)]
 
         # SUNFLOWER placement (preferred near water and edge) - domain aware
-        sunflower_target = requested[CROP_SUNFLOWER]
+        sunflower_target = requested.get(CROP_SUNFLOWER, 0)
         sunflower_placed = 0
 
         sunflower_placed += self._assign_crop(
@@ -397,14 +397,14 @@ class CSPSolver:
             )
 
         # CORN placement - prefer near water but only where tile domain allows corn
-        corn_target = requested[CROP_CORN]
+        corn_target = requested.get(CROP_CORN, 0)
         corn_candidates = [v for v in (near_water_inner + near_water_edge + dry_inner + dry_edge) if self._is_available(v) and self._tile_allows(v, CROP_CORN)]
         corn_placed = self._assign_crop(
             corn_candidates[: corn_target * 3], CROP_CORN, corn_target
         )
 
         # WHEAT placement
-        wheat_target = requested[CROP_WHEAT]
+        wheat_target = requested.get(CROP_WHEAT, 0)
         wheat_candidates = [v for v in edge_tiles + inner_tiles if self._is_available(v) and self._tile_allows(v, CROP_WHEAT)]
         random.shuffle(wheat_candidates)
         wheat_placed = self._assign_crop(
@@ -412,14 +412,14 @@ class CSPSolver:
         )
 
         # TOMATO placement (prefer near water)
-        tomato_target = requested[CROP_TOMATO]
+        tomato_target = requested.get(CROP_TOMATO, 0)
         tomato_candidates = [v for v in (near_water_edge + near_water_inner + dry_edge + dry_inner) if self._is_available(v) and self._tile_allows(v, CROP_TOMATO)]
         tomato_placed = self._assign_crop(
             tomato_candidates[: tomato_target * 3], CROP_TOMATO, tomato_target
         )
 
         # CARROT placement (versatile)
-        carrot_target = requested[CROP_CARROT]
+        carrot_target = requested.get(CROP_CARROT, 0)
         carrot_candidates = [v for v in edge_tiles + inner_tiles if self._is_available(v) and self._tile_allows(v, CROP_CARROT)]
         random.shuffle(carrot_candidates)
         carrot_placed = self._assign_crop(
@@ -427,7 +427,7 @@ class CSPSolver:
         )
 
         # POTATO placement (prefer dry areas)
-        potato_target = requested[CROP_POTATO]
+        potato_target = requested.get(CROP_POTATO, 0)
         potato_candidates = [v for v in (dry_inner + dry_edge + near_water_inner + near_water_edge) if self._is_available(v) and self._tile_allows(v, CROP_POTATO)]
         potato_placed = self._assign_crop(
             potato_candidates[: potato_target * 3], CROP_POTATO, potato_target

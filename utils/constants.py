@@ -59,7 +59,7 @@ TILE_COST = {
     TILE_MUD: 3.0,
     TILE_WATER: 999,
     TILE_FIELD: 1.0,
-TILE_SNOW_STONE: 1.2,
+    TILE_SNOW_STONE: 1.2,
     TILE_WINTER_SNOW: 2.5,
     TILE_DARK_MUD: 4.0,
 }
@@ -93,12 +93,12 @@ ANIMAL_COSTS = {
     TILE_GRASS: 1.0,
     TILE_DIRT: 1.0,
     TILE_FIELD: 1.0,
-    TILE_MUD: 1.0,
-    TILE_WATER: 1.0,
-    TILE_STONE: 1.0,
-    TILE_SNOW_STONE: 1.0,
-    TILE_WINTER_SNOW: 1.0,
-    TILE_DARK_MUD: 1.0,
+    TILE_MUD: 2.0,
+    TILE_WATER: float('inf'),
+    TILE_STONE: float('inf'),
+    TILE_SNOW_STONE: float('inf'),
+    TILE_WINTER_SNOW: 2.0,
+    TILE_DARK_MUD: 2.0,
 }
 
 # ── Tile Base Colors (richer, more saturated) ────────────────────────────────
