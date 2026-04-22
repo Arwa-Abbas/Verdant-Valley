@@ -50,10 +50,9 @@ class SeasonManager:
         if self.tick >= SEASON_DURATION:
             self._advance(grid)
 
-        # --- Auto rain every 60 seconds ---
-        if clock and clock.seconds - self.last_rain_tick >= 60:
-            self.trigger_rain(grid)
-            self.last_rain_tick = clock.seconds
+        # ❌ REMOVED: Auto rain every 60 seconds
+        # Rain now only happens when you press the RAIN button
+        # The button calls trigger_rain() directly
 
         # Rain timer logic
         if self.rain_active:
@@ -67,9 +66,12 @@ class SeasonManager:
         return flipped
 
     def trigger_rain(self, grid):
+        """Trigger rain manually (called from rain button)"""
+        print("🌧 RAIN TRIGGERED - Applying to grid!")
         self.rain_active = True
-        self.rain_timer = 10 * FPS  # 10 seconds of rain
+        self.rain_timer = 10 * FPS
         grid.apply_rain(self.index)
+        print(f"🌧 Grid apply_rain() called for season index: {self.index}")
 
     def advance_manual(self, grid):
         """Manually force the next season while preserving runtime flow."""
@@ -107,14 +109,14 @@ class SeasonManager:
         night_level = max(0.0, (night_level_raw - 0.50) / 0.50)
 
         self.night_alpha = int(night_level * 130)
-        
+
         new_is_night = cycle_pos >= (self.day_night_cycle // 2)
-        flipped = (new_is_night != self.is_night)
-        
+        flipped = new_is_night != self.is_night
+
         self.is_night = new_is_night
         self.time_of_day = "Night" if self.is_night else "Day"
         self.day_count = (self.tick // self.day_night_cycle) + 1
-        
+
         return flipped
 
     def time_label(self):

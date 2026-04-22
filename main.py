@@ -39,6 +39,7 @@ from game_ui.csp_popup import CSPPopup
 from game_ui.notification_popup import NotificationPopup
 from game_ui.regeneration_popup import RegenerationPopup
 from game_ui.custom_input_popup import CustomInputPopup
+from game_ui.rain_animation import RainAnimation
 
 
 class VideoLoader:
@@ -500,7 +501,7 @@ class Game:
         self.font_medium = pygame.font.Font(None, 20)
         self.font_large = pygame.font.Font(None, 26)
 
-        # Game objects (populated by init_game)
+        # Game objects
         self.grid = None
         self.season = None
         self.csp_solver = None
@@ -508,13 +509,14 @@ class Game:
         self.farm_ui = None
         self.farmer = None
         self.guard = None
-        self.animal_fox = None  # Changed from animal_bear to animal_fox
+        self.animal_fox = None
         self.animal_rabbit = None
         self.agents = []
         self.last_season_index = 0
         self.end_screen = None
+        self.rain_animation = None
 
-        # ── Crop tracking ──────────────────────────────────────────────────
+        # Crop tracking
         self.notification_popup = None
         self.regeneration_popup = None
         self.custom_input_popup = None
@@ -523,15 +525,14 @@ class Game:
         self.crops_left = 0
         # Flips True once crops exist this cycle; resets after popup fires.
         self._field_was_populated = False
-        self.regeneration_mode = None  # "auto" or "custom"
+        self.regeneration_mode = None
 
         # Screens
         self.menu = MainMenu(self.screen, self.music_manager)
         self.how_to_play = HowToPlayScreen(self.screen)
         self.settings = SettingsScreen(self.screen, self.music_manager)
 
-    # ── Game initialisation ───────────────────────────────────────────────────
-
+    #  Game initialisation
     def init_game(self):
 
         # Initialize all attributes to None first
@@ -562,6 +563,7 @@ class Game:
         # Now initialize game objects
         try:
             self.grid = Grid()
+            self.rain_animation = RainAnimation(self.grid)
             self.season = SeasonManager()
             if self.season and self.grid:
                 self.season.apply_current_effects(self.grid)
@@ -1067,6 +1069,10 @@ class Game:
         self.draw_season_info()
         self.draw_minimap()
 
+        # Draw rain animation on top
+        if self.rain_animation:
+            self.rain_animation.draw(self.screen)
+
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def run(self):
@@ -1158,6 +1164,9 @@ class Game:
                         ):
                             if self.grid and self.season:
                                 self.season.trigger_rain(self.grid)
+                                # Start rain animation
+                                if self.rain_animation:
+                                    self.rain_animation.start()
                                 if self.csp_solver:
                                     self.csp_solver.solve()
                                     self.csp_solver.apply_to_grid()
@@ -1270,6 +1279,12 @@ class Game:
                     for agent in self.agents:
                         if agent and hasattr(agent, "update"):
                             agent.update(self.grid, self.agents, self.season)
+
+                    # Update rain animation
+                    if self.rain_animation:
+                        rain_finished = self.rain_animation.update()
+                        if rain_finished:
+                            print("🌧 Rain animation finished!")
 
                     # Respawn caught animals at random positions
                     if (
