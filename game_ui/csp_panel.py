@@ -1,5 +1,6 @@
 """
 CSP Panel - Visualization for Constraint Satisfaction Problem solving
+Shows grid preview, crop legend, and real-time assignment progress
 """
 
 import pygame
@@ -9,105 +10,132 @@ from game_ui.fonts import FontCache
 
 
 class CSPPanel:
+    """Displays CSP solving progress during farm layout generation"""
+
     def __init__(self, screen):
         self.screen = screen
 
     def draw(self, log_entry, all_vars, assignment):
-        """Draw CSP visualization overlay"""
-        ow, oh = 600, 400
-        ox = SCREEN_W // 2 - ow // 2
-        oy = SCREEN_H // 2 - oh // 2
+        """
+        Draw CSP visualization overlay.
+
+        Args:
+            log_entry: Tuple (col, row, crop, action) - most recent step
+            all_vars: List of all variable coordinates (field tiles)
+            assignment: Dict mapping (col,row) -> crop type
+        """
+        panel_w, panel_h = 600, 400
+        panel_x = SCREEN_W // 2 - panel_w // 2
+        panel_y = SCREEN_H // 2 - panel_h // 2
 
         # Panel background
         draw_rounded_rect(
             self.screen,
             C_BG_PANEL,
-            (ox, oy, ow, oh),
+            (panel_x, panel_y, panel_w, panel_h),
             radius=12,
             border=2,
             border_color=C_PANEL_BORD,
         )
 
-        f = FontCache.get(FONT_LARGE)
-        fs = FontCache.get(FONT_SMALL)
-        ft = FontCache.get(FONT_TINY)
+        # Fonts
+        font_large = FontCache.get(FONT_LARGE)
+        font_small = FontCache.get(FONT_SMALL)
+        font_tiny = FontCache.get(FONT_TINY)
 
+        # Title
         draw_text(
             self.screen,
             "CSP FARM LAYOUT PLANNER",
-            f,
+            font_large,
             C_TEXT_GOLD,
             SCREEN_W // 2,
-            oy + 20,
+            panel_y + 20,
             "center",
         )
         draw_text(
             self.screen,
             "Assigning crops via Backtracking + Forward Checking",
-            fs,
+            font_small,
             C_TEXT_DIM,
             SCREEN_W // 2,
-            oy + 48,
+            panel_y + 48,
             "center",
         )
 
-        # Assignment grid mini-view
-        cell = 14
+        # Grid preview (mini-map showing assigned crops)
+        cell_size = 14
         cols_shown = min(GRID_COLS, 18)
         rows_shown = min(GRID_ROWS, 14)
-        gx = ox + 20
-        gy = oy + 75
-        for c in range(cols_shown):
-            for r in range(rows_shown):
-                color = C_BG_MID
-                crop = assignment.get((c, r))
+        grid_x = panel_x + 20
+        grid_y = panel_y + 75
+
+        for col in range(cols_shown):
+            for row in range(rows_shown):
+                crop = assignment.get((col, row))
                 if crop is not None and crop != CROP_NONE:
                     color = CROP_COLOR[crop]
+                else:
+                    color = C_BG_MID
+
                 pygame.draw.rect(
                     self.screen,
                     color,
-                    (gx + c * cell, gy + r * cell, cell - 1, cell - 1),
+                    (
+                        grid_x + col * cell_size,
+                        grid_y + row * cell_size,
+                        cell_size - 1,
+                        cell_size - 1,
+                    ),
                     border_radius=1,
                 )
 
-        # Legend
-        lx = ox + 20
-        ly = gy + rows_shown * cell + 12
+        # Crop legend
+        legend_x = panel_x + 20
+        legend_y = grid_y + rows_shown * cell_size + 12
+
         for crop_id, name in CROP_NAMES.items():
             if crop_id == CROP_NONE:
                 continue
-            pygame.draw.rect(
-                self.screen, CROP_COLOR[crop_id], (lx, ly, 12, 12), border_radius=2
-            )
-            draw_text(self.screen, name, ft, C_TEXT_MAIN, lx + 16, ly)
-            lx += 80
 
-        # Last action log
+            pygame.draw.rect(
+                self.screen,
+                CROP_COLOR[crop_id],
+                (legend_x, legend_y, 12, 12),
+                border_radius=2,
+            )
+            draw_text(
+                self.screen, name, font_tiny, C_TEXT_MAIN, legend_x + 16, legend_y
+            )
+            legend_x += 80
+
+        # Latest action log (assignment or backtrack)
         if log_entry:
-            c, r, crop, action = log_entry
-            col_map = {
+            col, row, crop, action = log_entry
+            action_colors = {
                 "assign": C_FARMER,
                 "backtrack": C_TEXT_WARN,
                 "final": C_TEXT_GOLD,
             }
-            msg = f"{action.upper()}  ({c},{r}) → {CROP_NAMES[crop]}"
+            message = f"{action.upper()}  ({col},{row}) → {CROP_NAMES[crop]}"
             draw_text(
                 self.screen,
-                msg,
-                fs,
-                col_map.get(action, C_TEXT_MAIN),
+                message,
+                font_small,
+                action_colors.get(action, C_TEXT_MAIN),
                 SCREEN_W // 2,
-                oy + oh - 40,
+                panel_y + panel_h - 40,
                 "center",
             )
 
-        assigned = len([v for v, cr in assignment.items() if cr != CROP_NONE])
+        # Progress counter
+        assigned_count = len([c for c in assignment.values() if c != CROP_NONE])
         draw_text(
             self.screen,
-            f"Assigned {assigned} / {len(all_vars)} tiles",
-            ft,
+            f"Assigned {assigned_count} / {len(all_vars)} tiles",
+            font_tiny,
             C_TEXT_DIM,
             SCREEN_W // 2,
-            oy + oh - 20,
+            panel_y + panel_h - 20,
             "center",
         )

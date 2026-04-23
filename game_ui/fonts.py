@@ -1,5 +1,5 @@
 """
-Font management with better font support
+Font management
 """
 
 import pygame
@@ -13,7 +13,6 @@ class FontCache:
     def get(cls, size, bold=False, italic=False):
         key = (size, bold, italic)
         if key not in cls._cache:
-            # Try different font options
             font_paths = [
                 None,  # Default pygame font
                 "Arial.ttf",
@@ -31,7 +30,7 @@ class FontCache:
                     else:
                         font = pygame.font.Font(None, size)
 
-                    # Apply bold/italic if needed
+                    # Apply bold/italic
                     if bold and hasattr(font, "set_bold"):
                         font.set_bold(True)
                     if italic and hasattr(font, "set_italic"):

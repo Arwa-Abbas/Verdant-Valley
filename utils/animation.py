@@ -44,7 +44,7 @@ class Animation:
         self.animation_timer = 0
 
         print(
-            f"✓ Loaded {len(self.frames)} rows, {len(self.frames[0]) if self.frames else 0} frames per row"
+            f"Loaded {len(self.frames)} rows, {len(self.frames[0]) if self.frames else 0} frames per row"
         )
 
     def set_direction(self, row):

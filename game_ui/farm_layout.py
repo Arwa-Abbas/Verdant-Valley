@@ -56,7 +56,7 @@ class FarmUI:
         except:
             pass
 
-        # House trees (smaller version - separate sprite)
+        # House trees
         try:
             img = pygame.image.load("assets/farm/Oak_Tree.png").convert_alpha()
             self.sprites["house_tree"] = pygame.transform.scale(img, (90, 110))

@@ -1,30 +1,37 @@
 """
-game_ui/custom_input_popup.py - Popup for selecting exact crop counts
+Custom Input Popup - Select exact crop counts for manual farm layout generation
+Supports seasonal restrictions (e.g., winter only allows Corn and Carrot)
 """
 
 import pygame
-
 from utils.constants import *
 
 
 class CustomInputPopup:
+    """Popup window for selecting exact crop counts before regeneration"""
+
     def __init__(self, screen, max_crops=50, initial_counts=None, allowed_crops=None):
         self.screen = screen
         self.visible = True
         self.max_crops = max_crops
-        self.selected = False
+        self.submitted = False
+        self.error_message = ""
+        self.error_timer = 0
+        self.mouse_pos = (0, 0)
 
-        # INCREASED SIZE to fit 5 crops
+        # Panel dimensions
         self.width = 680
         self.height = 520
         self.x = (SCREEN_W - self.width) // 2
         self.y = (SCREEN_H - self.height) // 2
 
+        # Fonts
         self.font_title = pygame.font.Font(None, 42)
         self.font_message = pygame.font.Font(None, 22)
         self.font_input = pygame.font.Font(None, 30)
         self.font_button = pygame.font.Font(None, 26)
 
+        # Colors
         self.panel_bg = (20, 30, 25)
         self.border_color = (150, 220, 130)
         self.title_color = (255, 220, 110)
@@ -34,6 +41,7 @@ class CustomInputPopup:
         self.button_hover = (140, 200, 130)
         self.button_text = (255, 255, 255)
 
+        # Initialize crop counts
         allowed_set = set(allowed_crops) if allowed_crops else None
 
         default_counts = {
@@ -43,101 +51,146 @@ class CustomInputPopup:
             CROP_TOMATO: 0,
             CROP_CARROT: 0,
         }
+
         if initial_counts:
             for crop in default_counts:
                 default_counts[crop] = max(0, int(initial_counts.get(crop, 0)))
+
         if allowed_set is not None:
             for crop in default_counts:
                 if crop not in allowed_set:
                     default_counts[crop] = 0
+
         self.crop_counts = default_counts
 
-        base_rows = [
+        # Build crop rows based on allowed crops
+        all_crops = [
             (CROP_WHEAT, "Wheat", (230, 200, 60)),
             (CROP_SUNFLOWER, "Sunflower", (255, 180, 0)),
             (CROP_CORN, "Corn", (160, 210, 60)),
             (CROP_TOMATO, "Tomato", (220, 40, 40)),
             (CROP_CARROT, "Carrot", (255, 140, 40)),
         ]
+
         if allowed_set is None:
-            self.crop_rows = base_rows
+            self.crop_rows = all_crops
         else:
-            self.crop_rows = [row for row in base_rows if row[0] in allowed_set]
-            # Add winter hint if only corn and carrot are allowed
+            self.crop_rows = [row for row in all_crops if row[0] in allowed_set]
+
+            # Winter hint for season-restricted planting
             if (
                 allowed_set
                 and len(allowed_set) == 2
                 and CROP_CORN in allowed_set
                 and CROP_CARROT in allowed_set
             ):
-                self.winter_hint = (
-                    "❄️ Winter Season: Only Corn and Carrot can be planted!"
-                )
+                self.winter_hint = "Winter Season: Only Corn and Carrot can be planted!"
             else:
                 self.winter_hint = None
 
         self.crop_controls = {}
         self._build_crop_controls()
 
-        # Generate button - centered at bottom
+        # Generate button
         self.button_width = 200
         self.button_height = 50
         self.button_x = self.x + (self.width - self.button_width) // 2
         self.button_y = self.y + self.height - 80
         self.button_rect = pygame.Rect(
-            self.button_x,
-            self.button_y,
-            self.button_width,
-            self.button_height,
+            self.button_x, self.button_y, self.button_width, self.button_height
         )
 
-        self.mouse_pos = (0, 0)
-        self.submitted = False
-        self.error_message = ""
-        self.error_timer = 0
+    # ============================================================
+    # UI CONSTRUCTION
+    # ============================================================
 
     def _build_crop_controls(self):
+        """Create (+ / -) buttons and value displays for each crop"""
         row_y = self.y + 130
         row_gap = 52
-        for index, (crop, _name, _color) in enumerate(self.crop_rows):
-            y = row_y + index * row_gap
-            minus_rect = pygame.Rect(self.x + 300, y - 4, 34, 34)
-            value_rect = pygame.Rect(self.x + 346, y - 4, 80, 34)
-            plus_rect = pygame.Rect(self.x + 438, y - 4, 34, 34)
+
+        for idx, (crop, _, _) in enumerate(self.crop_rows):
+            y = row_y + idx * row_gap
             self.crop_controls[crop] = {
-                "minus": minus_rect,
-                "value": value_rect,
-                "plus": plus_rect,
+                "minus": pygame.Rect(self.x + 300, y - 4, 34, 34),
+                "value": pygame.Rect(self.x + 346, y - 4, 80, 34),
+                "plus": pygame.Rect(self.x + 438, y - 4, 34, 34),
             }
+
+    # ============================================================
+    # DATA MANAGEMENT
+    # ============================================================
 
     def total_selected(self):
         return sum(self.crop_counts.values())
 
+    def _adjust_crop(self, crop, delta):
+        """Increase or decrease crop count within field limits"""
+        new_total = self.total_selected() + delta
+
+        if delta > 0 and new_total > self.max_crops:
+            self.error_message = f"Only {self.max_crops} field tiles are available"
+            self.error_timer = 120
+            return
+
+        new_value = max(0, self.crop_counts[crop] + delta)
+
+        if delta < 0 and self.crop_counts[crop] == 0:
+            return
+
+        self.crop_counts[crop] = new_value
+        self.error_message = ""
+        self.error_timer = 0
+
+    def try_submit(self):
+        """Validate and submit the selected crop counts"""
+        if self.total_selected() <= 0:
+            self.error_message = "Select at least one crop"
+            self.error_timer = 120
+            return None
+
+        self.submitted = True
+        self.visible = False
+        return self.get_value()
+
+    def get_value(self):
+        return dict(self.crop_counts) if self.submitted else None
+
+    # ============================================================
+    # UPDATE & DRAW
+    # ============================================================
+
     def update(self):
+        """Update popup state each frame"""
         self.mouse_pos = pygame.mouse.get_pos()
         if self.error_timer > 0:
             self.error_timer -= 1
         return False
 
     def draw(self):
+        """Render the popup window"""
         if not self.visible:
             return
 
+        # Background dim
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
 
+        # Main panel
         panel_rect = pygame.Rect(self.x, self.y, self.width, self.height)
         pygame.draw.rect(self.screen, self.panel_bg, panel_rect, border_radius=22)
         pygame.draw.rect(
             self.screen, self.border_color, panel_rect, 3, border_radius=22
         )
 
+        # Title
         title = self.font_title.render("Custom Crop Generation", True, self.title_color)
         self.screen.blit(
             title, title.get_rect(center=(self.x + self.width // 2, self.y + 38))
         )
 
+        # Selection count message
         message = self.font_message.render(
             f"Select exact crop counts ({self.total_selected()} / {self.max_crops})",
             True,
@@ -147,46 +200,52 @@ class CustomInputPopup:
             message, message.get_rect(center=(self.x + self.width // 2, self.y + 85))
         )
 
-        # Show winter hint if applicable
+        # Winter season hint
         if hasattr(self, "winter_hint") and self.winter_hint:
-            hint_color = (150, 200, 255)
-            hint = self.font_message.render(self.winter_hint, True, hint_color)
+            hint = self.font_message.render(self.winter_hint, True, (150, 200, 255))
             self.screen.blit(
                 hint, hint.get_rect(center=(self.x + self.width // 2, self.y + 110))
             )
-            start_y_offset = 140
-        else:
-            start_y_offset = 130
 
+        # Crop rows
         for crop, name, color in self.crop_rows:
             controls = self.crop_controls[crop]
             row_y = controls["value"].y + 4
+
+            # Crop color swatch
             pygame.draw.rect(
                 self.screen, color, (self.x + 100, row_y + 6, 18, 18), border_radius=4
             )
+
+            # Crop name
             label = self.font_message.render(name, True, self.text_color)
             self.screen.blit(label, (self.x + 130, row_y + 2))
 
+            # Minus button
             for symbol, rect in (("-", controls["minus"]), ("+", controls["plus"])):
                 hovered = rect.collidepoint(self.mouse_pos)
-                button_color = self.button_hover if hovered else self.button_normal
-                pygame.draw.rect(self.screen, button_color, rect, border_radius=8)
+                btn_color = self.button_hover if hovered else self.button_normal
+                pygame.draw.rect(self.screen, btn_color, rect, border_radius=8)
                 pygame.draw.rect(
                     self.screen, self.border_color, rect, 2, border_radius=8
                 )
-                text = self.font_button.render(symbol, True, self.button_text)
-                self.screen.blit(text, text.get_rect(center=rect.center))
 
+                symbol_text = self.font_button.render(symbol, True, self.button_text)
+                self.screen.blit(symbol_text, symbol_text.get_rect(center=rect.center))
+
+            # Value display
             value_rect = controls["value"]
             pygame.draw.rect(self.screen, self.input_bg, value_rect, border_radius=8)
             pygame.draw.rect(
                 self.screen, self.border_color, value_rect, 2, border_radius=8
             )
+
             value_text = self.font_input.render(
                 str(self.crop_counts[crop]), True, self.text_color
             )
             self.screen.blit(value_text, value_text.get_rect(center=value_rect.center))
 
+        # Error message
         if self.error_timer > 0:
             error_text = self.font_message.render(
                 self.error_message, True, (255, 100, 100)
@@ -198,35 +257,29 @@ class CustomInputPopup:
                 ),
             )
 
+        # Generate button
         button_hover = self.button_rect.collidepoint(self.mouse_pos)
-        button_color = self.button_hover if button_hover else self.button_normal
-        pygame.draw.rect(self.screen, button_color, self.button_rect, border_radius=10)
+        btn_color = self.button_hover if button_hover else self.button_normal
+
+        pygame.draw.rect(self.screen, btn_color, self.button_rect, border_radius=10)
         pygame.draw.rect(
             self.screen, self.border_color, self.button_rect, 2, border_radius=10
         )
-        button_text = self.font_button.render("Generate Crops", True, self.button_text)
-        self.screen.blit(
-            button_text, button_text.get_rect(center=self.button_rect.center)
-        )
+
+        btn_text = self.font_button.render("Generate Crops", True, self.button_text)
+        self.screen.blit(btn_text, btn_text.get_rect(center=self.button_rect.center))
+
+    # ============================================================
+    # EVENT HANDLING
+    # ============================================================
 
     def handle_keypress(self, key):
+        """Process keyboard input (Enter to submit)"""
         if key == pygame.K_RETURN:
             self.try_submit()
 
-    def _adjust_crop(self, crop, delta):
-        new_total = self.total_selected() + delta
-        if delta > 0 and new_total > self.max_crops:
-            self.error_message = f"Only {self.max_crops} field tiles are available."
-            self.error_timer = 120
-            return
-        next_value = max(0, self.crop_counts[crop] + delta)
-        if delta < 0 and self.crop_counts[crop] == 0:
-            return
-        self.crop_counts[crop] = next_value
-        self.error_message = ""
-        self.error_timer = 0
-
     def handle_click(self, pos):
+        """Process mouse clicks on controls"""
         for crop, controls in self.crop_controls.items():
             if controls["minus"].collidepoint(pos):
                 self._adjust_crop(crop, -1)
@@ -234,22 +287,9 @@ class CustomInputPopup:
             if controls["plus"].collidepoint(pos):
                 self._adjust_crop(crop, 1)
                 return
+
         if self.button_rect.collidepoint(pos):
             self.try_submit()
-
-    def try_submit(self):
-        if self.total_selected() <= 0:
-            self.error_message = "Select at least one crop."
-            self.error_timer = 120
-            return None
-        self.submitted = True
-        self.visible = False
-        return self.get_value()
-
-    def get_value(self):
-        if self.submitted:
-            return dict(self.crop_counts)
-        return None
 
     def is_visible(self):
         return self.visible

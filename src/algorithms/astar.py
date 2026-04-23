@@ -1,44 +1,43 @@
-"""
-src/algorithms/astar.py - A* Pathfinding with Terrain Costs
-"""
-
 import heapq
 from utils.helpers import manhattan, neighbors_4
 from utils.constants import TILE_WATER, TILE_STONE, TILE_SNOW_STONE
 
 
 class AStarResult:
-    def __init__(self, path, explored, cost):
+    def __init__(self, path, explored, cost, nodes_expanded=0):
         self.path = path
         self.explored = explored
         self.cost = cost
+        self.nodes_expanded = nodes_expanded
 
 
 def astar(grid, start, goal, cost_dict=None, agent_type=None, rain_active=False):
     """
     A* on the weighted grid.
-    Returns AStarResult(path, explored, total_cost).
+    Returns AStarResult(path, explored, total_cost, nodes_expanded).
     path is [] if unreachable.
     """
-
-    # agent_type and rain_active are now explicit parameters
 
     if cost_dict is None:
         if agent_type == "Farmer":
             from utils.constants import FARMER_COSTS
+
             cost_dict = FARMER_COSTS
         elif agent_type == "Guard":
             from utils.constants import GUARD_COSTS
+
             cost_dict = GUARD_COSTS
         elif agent_type == "Animal":
             from utils.constants import ANIMAL_COSTS
+
             cost_dict = ANIMAL_COSTS
         else:
             from utils.constants import TILE_COST
+
             cost_dict = TILE_COST
 
     if start == goal:
-        return AStarResult([start], set(), 0)
+        return AStarResult([start], set(), 0, 0)
 
     open_heap = []
     heapq.heappush(open_heap, (0, 0, start))
@@ -46,6 +45,7 @@ def astar(grid, start, goal, cost_dict=None, agent_type=None, rain_active=False)
     came_from = {start: None}
     g_cost = {start: 0}
     explored = set()
+    nodes_expanded = 0
 
     while open_heap:
         f, g, current = heapq.heappop(open_heap)
@@ -53,10 +53,11 @@ def astar(grid, start, goal, cost_dict=None, agent_type=None, rain_active=False)
         if current in explored:
             continue
         explored.add(current)
+        nodes_expanded += 1
 
         if current == goal:
             path = _reconstruct(came_from, goal)
-            return AStarResult(path, explored, g)
+            return AStarResult(path, explored, g, nodes_expanded)
 
         col, row = current
 
@@ -64,7 +65,6 @@ def astar(grid, start, goal, cost_dict=None, agent_type=None, rain_active=False)
             tile = grid.get(nc, nr)
             if tile is None:
                 continue
-
 
             if callable(cost_dict):
                 move_cost = cost_dict(tile)
@@ -75,12 +75,12 @@ def astar(grid, start, goal, cost_dict=None, agent_type=None, rain_active=False)
                 continue
             move_cost = float(move_cost)
 
-            if move_cost == float('inf'):
+            if move_cost == float("inf"):
                 continue
 
             # Frozen water tiles become walkable (ice)
             if tile.type == TILE_WATER and getattr(tile, "frozen", False):
-                move_cost = 1.5  # walkable but slippery
+                move_cost = 1.5
 
             # Custom movement rules for role-specific terrain constraints.
             if agent_type in ("Farmer", "Guard"):
@@ -107,7 +107,6 @@ def astar(grid, start, goal, cost_dict=None, agent_type=None, rain_active=False)
                 if getattr(tile, "frozen", False):
                     move_cost += 0.45
 
-            # Skip impassable tiles
             if move_cost == float("inf"):
                 continue
 
@@ -118,7 +117,7 @@ def astar(grid, start, goal, cost_dict=None, agent_type=None, rain_active=False)
                 heapq.heappush(open_heap, (new_g + h, new_g, (nc, nr)))
                 came_from[(nc, nr)] = current
 
-    return AStarResult([], explored, float("inf"))
+    return AStarResult([], explored, float("inf"), nodes_expanded)
 
 
 def _reconstruct(came_from, node):

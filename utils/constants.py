@@ -1,8 +1,7 @@
 import pygame
 
-# ============================================================================
-# SCREEN & GRID DIMENSIONS - FIXED FOR 18 COLUMNS
-# ============================================================================
+
+# SCREEN & GRID DIMENSIONS
 
 FPS = 60
 TILE_SIZE = 48
@@ -10,18 +9,11 @@ GRID_COLS, GRID_ROWS = 18, 14
 SIDEBAR_W = 320
 GRID_OFFSET_X, GRID_OFFSET_Y = 0, 80
 
-# FORCE LARGER SCREEN - THIS IS THE FIX
-# 18 columns * 48px = 864px for grid + 320px sidebar = 1184px minimum
-SCREEN_W = 1280  # FORCED to show all 18 columns
-SCREEN_H = 800  # FORCED for good height
+SCREEN_W = 1280
+SCREEN_H = 800
 
-print(f"🔴 FIXED SCREEN SIZE: {SCREEN_W} x {SCREEN_H}")
-print(f"🔴 GRID SIZE: {GRID_COLS} x {GRID_ROWS} (18x14)")
-print(f"🔴 Grid takes {GRID_COLS * TILE_SIZE}px, Sidebar takes {SIDEBAR_W}px")
 
-# ============================================================================
 # COLOR PALETTE
-# ============================================================================
 
 C_BG_DARK = (18, 26, 18)
 C_BG_MID = (28, 40, 28)
@@ -53,18 +45,16 @@ C_PATH_GUARD = (255, 100, 80)
 C_PATH_ANIMAL = (255, 200, 100)
 C_EXPLORED = (255, 255, 100, 60)
 
-# ============================================================================
+
 # TILE TYPES
-# ============================================================================
 
 TILE_GRASS, TILE_DIRT, TILE_STONE, TILE_MUD, TILE_WATER, TILE_FIELD = 0, 1, 2, 3, 4, 5
 TILE_SNOW_STONE = 6
 TILE_WINTER_SNOW = 7
 TILE_DARK_MUD = 8
 
-# ============================================================================
+
 # TILE MOVEMENT COSTS
-# ============================================================================
 
 TILE_COST = {
     TILE_GRASS: 1.0,
@@ -114,9 +104,8 @@ ANIMAL_COSTS = {
     TILE_DARK_MUD: 2.0,
 }
 
-# ============================================================================
+
 # TILE COLORS
-# ============================================================================
 
 TILE_COLOR = {
     TILE_GRASS: (38, 120, 38),
@@ -156,9 +145,8 @@ TILE_SHADOW = {
 
 TILE_RADIUS = 3
 
-# ============================================================================
+
 # CROP SYSTEM
-# ============================================================================
 
 (
     CROP_NONE,
@@ -180,11 +168,11 @@ CROP_NAMES = {
 
 CROP_COLOR = {
     0: (70, 55, 30),
-    1: (230, 200, 60),  # Wheat gold
-    2: (255, 190, 20),  # Sunflower yellow
-    3: (160, 210, 50),  # Corn green
-    4: (220, 40, 40),  # Tomato red
-    5: (255, 140, 40),  # Carrot orange
+    1: (230, 200, 60),
+    2: (255, 190, 20),
+    3: (160, 210, 50),
+    4: (220, 40, 40),
+    5: (255, 140, 40),
 }
 
 CROP_GLOW_COLOR = {
@@ -204,16 +192,14 @@ CROP_VALUE = {
     5: 18,  # Carrot
 }
 
-# ============================================================================
+
 # UI & HOVER EFFECTS
-# ============================================================================
 
 C_TILE_HOVER_BORDER = (140, 240, 100)
 C_TILE_HOVER_FILL = (100, 220, 70, 30)
 
-# ============================================================================
+
 # SEASON SYSTEM
-# ============================================================================
 
 SEASON_TINTS = {
     0: (60, 180, 60, 12),
@@ -222,12 +208,11 @@ SEASON_TINTS = {
     3: (160, 200, 240, 22),
 }
 
-SEASONS = ["🌱 Spring", "☀️ Summer", "🍂 Autumn", "❄️ Winter"]
+SEASONS = ["Spring", "Summer", "Autumn", "Winter"]
 SEASON_DURATION = 15 * FPS
 
-# ============================================================================
+
 # GAME STATES
-# ============================================================================
 
 STATE_LOADING, STATE_MENU, STATE_CSP_VIZ, STATE_PLAYING = (
     "loading",
@@ -237,9 +222,8 @@ STATE_LOADING, STATE_MENU, STATE_CSP_VIZ, STATE_PLAYING = (
 )
 STATE_PAUSED, STATE_GA_VIZ, STATE_GAMEOVER = "paused", "ga_viz", "gameover"
 
-# ============================================================================
+
 # FONT SIZES
-# ============================================================================
 
 FONT_HUGE, FONT_TITLE, FONT_LARGE, FONT_MEDIUM, FONT_SMALL, FONT_TINY = (
     72,

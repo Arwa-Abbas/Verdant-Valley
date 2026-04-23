@@ -1,5 +1,4 @@
 """
-world/season.py  —  Verdant Valley
 Season and time manager for deterministic world progression.
 Handles automatic/manual season cycling, synchronized day/night state,
 seasonal weather effects (rain), and winter freeze hooks for the grid.
@@ -50,17 +49,12 @@ class SeasonManager:
         if self.tick >= SEASON_DURATION:
             self._advance(grid)
 
-        # ❌ REMOVED: Auto rain every 60 seconds
-        # Rain now only happens when you press the RAIN button
-        # The button calls trigger_rain() directly
-
         # Rain timer logic
         if self.rain_active:
             self.rain_timer -= 1
             if self.rain_timer <= 0:
                 self.rain_active = False
 
-        # Seasonal bloom pulse for UI shine
         self.bloom = abs(math.sin(self.tick * 0.02))
 
         return flipped
