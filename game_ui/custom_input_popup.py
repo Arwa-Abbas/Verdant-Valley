@@ -8,16 +8,15 @@ from utils.constants import *
 
 
 class CustomInputPopup:
-    """Popup for choosing exact crop counts with +/- controls."""
-
     def __init__(self, screen, max_crops=50, initial_counts=None, allowed_crops=None):
         self.screen = screen
         self.visible = True
         self.max_crops = max_crops
         self.selected = False
 
-        self.width = 560
-        self.height = 360
+        # INCREASED SIZE to fit 5 crops
+        self.width = 680
+        self.height = 520
         self.x = (SCREEN_W - self.width) // 2
         self.y = (SCREEN_H - self.height) // 2
 
@@ -41,6 +40,8 @@ class CustomInputPopup:
             CROP_WHEAT: 0,
             CROP_SUNFLOWER: 0,
             CROP_CORN: 0,
+            CROP_TOMATO: 0,
+            CROP_CARROT: 0,
         }
         if initial_counts:
             for crop in default_counts:
@@ -55,18 +56,34 @@ class CustomInputPopup:
             (CROP_WHEAT, "Wheat", (230, 200, 60)),
             (CROP_SUNFLOWER, "Sunflower", (255, 180, 0)),
             (CROP_CORN, "Corn", (160, 210, 60)),
+            (CROP_TOMATO, "Tomato", (220, 40, 40)),
+            (CROP_CARROT, "Carrot", (255, 140, 40)),
         ]
         if allowed_set is None:
             self.crop_rows = base_rows
         else:
             self.crop_rows = [row for row in base_rows if row[0] in allowed_set]
+            # Add winter hint if only corn and carrot are allowed
+            if (
+                allowed_set
+                and len(allowed_set) == 2
+                and CROP_CORN in allowed_set
+                and CROP_CARROT in allowed_set
+            ):
+                self.winter_hint = (
+                    "❄️ Winter Season: Only Corn and Carrot can be planted!"
+                )
+            else:
+                self.winter_hint = None
+
         self.crop_controls = {}
         self._build_crop_controls()
 
-        self.button_width = 160
-        self.button_height = 48
+        # Generate button - centered at bottom
+        self.button_width = 200
+        self.button_height = 50
         self.button_x = self.x + (self.width - self.button_width) // 2
-        self.button_y = self.y + self.height - 72
+        self.button_y = self.y + self.height - 80
         self.button_rect = pygame.Rect(
             self.button_x,
             self.button_y,
@@ -80,13 +97,13 @@ class CustomInputPopup:
         self.error_timer = 0
 
     def _build_crop_controls(self):
-        row_y = self.y + 120
-        row_gap = 58
+        row_y = self.y + 130
+        row_gap = 52
         for index, (crop, _name, _color) in enumerate(self.crop_rows):
             y = row_y + index * row_gap
-            minus_rect = pygame.Rect(self.x + 250, y - 4, 34, 34)
-            value_rect = pygame.Rect(self.x + 296, y - 4, 72, 34)
-            plus_rect = pygame.Rect(self.x + 380, y - 4, 34, 34)
+            minus_rect = pygame.Rect(self.x + 300, y - 4, 34, 34)
+            value_rect = pygame.Rect(self.x + 346, y - 4, 80, 34)
+            plus_rect = pygame.Rect(self.x + 438, y - 4, 34, 34)
             self.crop_controls[crop] = {
                 "minus": minus_rect,
                 "value": value_rect,
@@ -112,52 +129,85 @@ class CustomInputPopup:
 
         panel_rect = pygame.Rect(self.x, self.y, self.width, self.height)
         pygame.draw.rect(self.screen, self.panel_bg, panel_rect, border_radius=22)
-        pygame.draw.rect(self.screen, self.border_color, panel_rect, 3, border_radius=22)
+        pygame.draw.rect(
+            self.screen, self.border_color, panel_rect, 3, border_radius=22
+        )
 
         title = self.font_title.render("Custom Crop Generation", True, self.title_color)
-        self.screen.blit(title, title.get_rect(center=(self.x + self.width // 2, self.y + 34)))
+        self.screen.blit(
+            title, title.get_rect(center=(self.x + self.width // 2, self.y + 38))
+        )
 
         message = self.font_message.render(
             f"Select exact crop counts ({self.total_selected()} / {self.max_crops})",
             True,
             self.text_color,
         )
-        self.screen.blit(message, message.get_rect(center=(self.x + self.width // 2, self.y + 76)))
+        self.screen.blit(
+            message, message.get_rect(center=(self.x + self.width // 2, self.y + 85))
+        )
+
+        # Show winter hint if applicable
+        if hasattr(self, "winter_hint") and self.winter_hint:
+            hint_color = (150, 200, 255)
+            hint = self.font_message.render(self.winter_hint, True, hint_color)
+            self.screen.blit(
+                hint, hint.get_rect(center=(self.x + self.width // 2, self.y + 110))
+            )
+            start_y_offset = 140
+        else:
+            start_y_offset = 130
 
         for crop, name, color in self.crop_rows:
             controls = self.crop_controls[crop]
             row_y = controls["value"].y + 4
-            pygame.draw.rect(self.screen, color, (self.x + 90, row_y + 6, 16, 16), border_radius=4)
+            pygame.draw.rect(
+                self.screen, color, (self.x + 100, row_y + 6, 18, 18), border_radius=4
+            )
             label = self.font_message.render(name, True, self.text_color)
-            self.screen.blit(label, (self.x + 118, row_y + 2))
+            self.screen.blit(label, (self.x + 130, row_y + 2))
 
             for symbol, rect in (("-", controls["minus"]), ("+", controls["plus"])):
                 hovered = rect.collidepoint(self.mouse_pos)
                 button_color = self.button_hover if hovered else self.button_normal
                 pygame.draw.rect(self.screen, button_color, rect, border_radius=8)
-                pygame.draw.rect(self.screen, self.border_color, rect, 2, border_radius=8)
+                pygame.draw.rect(
+                    self.screen, self.border_color, rect, 2, border_radius=8
+                )
                 text = self.font_button.render(symbol, True, self.button_text)
                 self.screen.blit(text, text.get_rect(center=rect.center))
 
             value_rect = controls["value"]
             pygame.draw.rect(self.screen, self.input_bg, value_rect, border_radius=8)
-            pygame.draw.rect(self.screen, self.border_color, value_rect, 2, border_radius=8)
-            value_text = self.font_input.render(str(self.crop_counts[crop]), True, self.text_color)
+            pygame.draw.rect(
+                self.screen, self.border_color, value_rect, 2, border_radius=8
+            )
+            value_text = self.font_input.render(
+                str(self.crop_counts[crop]), True, self.text_color
+            )
             self.screen.blit(value_text, value_text.get_rect(center=value_rect.center))
 
         if self.error_timer > 0:
-            error_text = self.font_message.render(self.error_message, True, (255, 100, 100))
+            error_text = self.font_message.render(
+                self.error_message, True, (255, 100, 100)
+            )
             self.screen.blit(
                 error_text,
-                error_text.get_rect(center=(self.x + self.width // 2, self.y + self.height - 104)),
+                error_text.get_rect(
+                    center=(self.x + self.width // 2, self.y + self.height - 110)
+                ),
             )
 
         button_hover = self.button_rect.collidepoint(self.mouse_pos)
         button_color = self.button_hover if button_hover else self.button_normal
         pygame.draw.rect(self.screen, button_color, self.button_rect, border_radius=10)
-        pygame.draw.rect(self.screen, self.border_color, self.button_rect, 2, border_radius=10)
-        button_text = self.font_button.render("Generate", True, self.button_text)
-        self.screen.blit(button_text, button_text.get_rect(center=self.button_rect.center))
+        pygame.draw.rect(
+            self.screen, self.border_color, self.button_rect, 2, border_radius=10
+        )
+        button_text = self.font_button.render("Generate Crops", True, self.button_text)
+        self.screen.blit(
+            button_text, button_text.get_rect(center=self.button_rect.center)
+        )
 
     def handle_keypress(self, key):
         if key == pygame.K_RETURN:

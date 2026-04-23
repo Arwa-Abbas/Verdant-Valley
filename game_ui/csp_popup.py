@@ -1,7 +1,7 @@
 """
 game_ui/csp_popup.py — CSP Layout Generation Popup (Wood Theme)
-- Left side: Large farm layout preview
-- Right side: Statistics panel with tile counts + progress bars
+- Left side: Large farm layout preview + Terrain info below it
+- Right side: Statistics panel with crop counts and generation options
 """
 
 import pygame
@@ -16,12 +16,17 @@ class CSPPopup:
         self.visible = True
         self.confirmed = False
 
-        self.width = 1020
-        self.height = 720
+        self.width = 1100
+        self.height = 750
         self.x = (SCREEN_W - self.width) // 2
         self.y = (SCREEN_H - self.height) // 2
 
-        self.grid_area_width = int(self.width * 0.60)
+        # Left side: grid preview (top) + terrain (bottom)
+        self.grid_area_width = int(self.width * 0.55)
+        self.terrain_area_height = 180  # Height for terrain section on left
+        self.grid_preview_height = self.height - self.terrain_area_height - 100
+
+        # Right side: stats panel
         self.stats_area_width = self.width - self.grid_area_width - 50
 
         btn_width = 170
@@ -54,7 +59,6 @@ class CSPPopup:
             CROP_CORN: requested_counts.get(CROP_CORN, 0),
             CROP_TOMATO: 0,
             CROP_CARROT: 0,
-            CROP_POTATO: 0,
         }
         self.mode = self.csp_solver.get_mode()
         self.crop_controls = {}
@@ -76,11 +80,13 @@ class CSPPopup:
         )
 
         crop_y = mode_y + 84
-        row_gap = 46
+        row_gap = 42
         button_size = 28
         value_w = 72
 
-        for index, crop in enumerate((CROP_WHEAT, CROP_SUNFLOWER, CROP_CORN)):
+        for index, crop in enumerate(
+            (CROP_WHEAT, CROP_SUNFLOWER, CROP_CORN, CROP_TOMATO, CROP_CARROT)
+        ):
             row_y = crop_y + index * row_gap
             minus_rect = pygame.Rect(cx + 132, row_y - 4, button_size, button_size)
             value_rect = pygame.Rect(cx + 168, row_y - 4, value_w, button_size)
@@ -99,7 +105,13 @@ class CSPPopup:
 
     def _fit_counts_to_limit(self):
         limit = self._field_limit()
-        ordered_crops = [CROP_WHEAT, CROP_CORN, CROP_SUNFLOWER]
+        ordered_crops = [
+            CROP_WHEAT,
+            CROP_CORN,
+            CROP_SUNFLOWER,
+            CROP_TOMATO,
+            CROP_CARROT,
+        ]
         while self._selected_total() > limit:
             for crop in ordered_crops:
                 if self.crop_counts[crop] > 0 and self._selected_total() > limit:
@@ -120,9 +132,7 @@ class CSPPopup:
         next_counts = dict(self.crop_counts)
         next_counts[crop] = next_value
         if sum(next_counts.values()) > self._field_limit():
-            self.message = (
-                f"Total crops cannot exceed {self._field_limit()} available field tiles."
-            )
+            self.message = f"Total crops cannot exceed {self._field_limit()} available field tiles."
             return
         self.crop_counts = next_counts
         self._sync_solver_counts()
@@ -131,10 +141,7 @@ class CSPPopup:
         self.mode = mode
         self._sync_solver_counts()
 
-    # ── helpers ──────────────────────────────────────────────────────────────
-
     def _draw_section_header(self, text, x, y, width):
-        """Draws a section label with a divider line."""
         label = self.font_sec.render(text, True, (255, 215, 0))
         self.screen.blit(label, (x, y))
         line_y = y + label.get_height() + 4
@@ -144,7 +151,6 @@ class CSPPopup:
         return line_y + 8
 
     def _draw_bar(self, x, y, w, h, fraction, bar_color, bg_color=(60, 50, 40)):
-        """Draws a simple horizontal progress bar."""
         pygame.draw.rect(self.screen, bg_color, (x, y, w, h), border_radius=3)
         fill_w = max(2, int(w * min(fraction, 1.0)))
         pygame.draw.rect(self.screen, bar_color, (x, y, fill_w, h), border_radius=3)
@@ -216,8 +222,6 @@ class CSPPopup:
         surf = font.render(text, True, (255, 255, 255))
         self.screen.blit(surf, surf.get_rect(center=rect.center))
 
-    # ── main draw ────────────────────────────────────────────────────────────
-
     def draw(self):
         if not self.visible:
             return
@@ -226,7 +230,6 @@ class CSPPopup:
         overlay.fill((0, 0, 0, 210))
         self.screen.blit(overlay, (0, 0))
 
-        # Outer frame
         panel = pygame.Rect(self.x, self.y, self.width, self.height)
         pygame.draw.rect(self.screen, self.wood_dark, panel, border_radius=18)
         pygame.draw.rect(
@@ -236,7 +239,6 @@ class CSPPopup:
             self.screen, self.panel_bg, panel.inflate(-10, -10), border_radius=13
         )
 
-        # Title bar strip
         title_strip = pygame.Rect(self.x + 5, self.y + 5, self.width - 10, 52)
         pygame.draw.rect(self.screen, self.wood_dark, title_strip, border_radius=13)
         title = self.font_title.render("FARM LAYOUT GENERATOR", True, (255, 215, 0))
@@ -247,11 +249,16 @@ class CSPPopup:
         content_y = self.y + 64
         content_h = self.height - 74
 
-        # ── LEFT: grid preview ────────────────────────────────────────────
-        gx = self.x + 12
+        # ========== LEFT SIDE ==========
+        left_x = self.x + 12
+        left_width = self.grid_area_width - 18
+
+        # --- TOP: Grid Preview ---
+        grid_height = self.grid_preview_height
+        gx = left_x
         gy = content_y
-        gw = self.grid_area_width - 18
-        gh = content_h - 10
+        gw = left_width
+        gh = grid_height
 
         pygame.draw.rect(self.screen, self.inner_bg, (gx, gy, gw, gh), border_radius=10)
         pygame.draw.rect(
@@ -259,7 +266,84 @@ class CSPPopup:
         )
         self.draw_grid_preview(gx + 6, gy + 6, gw - 12, gh - 12)
 
-        # ── RIGHT: stats panel ────────────────────────────────────────────
+        # --- BOTTOM: Terrain Section ---
+        terrain_y = gy + grid_height + 10
+        terrain_height = self.terrain_area_height
+        terrain_width = left_width
+
+        pygame.draw.rect(
+            self.screen,
+            self.inner_bg,
+            (gx, terrain_y, terrain_width, terrain_height),
+            border_radius=10,
+        )
+        pygame.draw.rect(
+            self.screen,
+            self.wood_dark,
+            (gx, terrain_y, terrain_width, terrain_height),
+            1,
+            border_radius=10,
+        )
+
+        # Draw Terrain header
+        cx = gx + 14
+        cy = terrain_y + 10
+        header_y = self._draw_section_header(
+            "TERRAIN TYPES", cx, cy, terrain_width - 28
+        )
+
+        terrain_meta = {
+            TILE_WATER: ("Water", (40, 90, 160)),
+            TILE_FIELD: ("Field", (101, 67, 33)),
+            TILE_GRASS: ("Grass", (56, 95, 40)),
+            TILE_DIRT: ("Dirt", (94, 68, 42)),
+            TILE_STONE: ("Stone", (100, 100, 110)),
+            TILE_MUD: ("Mud", (85, 62, 40)),
+        }
+
+        # Count terrain tiles
+        terrain_counts = {t: 0 for t in terrain_meta}
+        total_tiles = 0
+        for c in range(GRID_COLS):
+            for r in range(GRID_ROWS):
+                tile = self.grid.get(c, r)
+                if tile and tile.type in terrain_counts:
+                    terrain_counts[tile.type] += 1
+                    total_tiles += 1
+        total_tiles = max(total_tiles, 1)
+
+        # Draw terrain rows in 2 columns for better fit
+        col1_x = cx
+        col2_x = cx + (terrain_width - 28) // 2 + 20
+        row_y = header_y
+        items = list(terrain_meta.items())
+        half = len(items) // 2
+
+        for i, (tile_type, (tname, tcolor)) in enumerate(items):
+            if i < half:
+                draw_x = col1_x
+            else:
+                draw_x = col2_x
+                if i == half:
+                    row_y = header_y
+
+            count = terrain_counts[tile_type]
+            pygame.draw.rect(
+                self.screen, tcolor, (draw_x, row_y + 2, 14, 14), border_radius=3
+            )
+            label = self.font_stat.render(tname, True, (210, 210, 200))
+            count_surf = self.font_stat.render(str(count), True, (200, 200, 180))
+            self.screen.blit(label, (draw_x + 20, row_y))
+            self.screen.blit(count_surf, (draw_x + 120, row_y))
+
+            # Mini bar
+            bar_w = 100
+            self._draw_bar(
+                draw_x + 20, row_y + 18, bar_w, 5, count / total_tiles, tcolor
+            )
+            row_y += 32
+
+        # ========== RIGHT SIDE ==========
         sx = self.x + self.grid_area_width + 8
         sy = content_y
         sw = self.stats_area_width
@@ -273,6 +357,7 @@ class CSPPopup:
         cx = sx + 14
         cy = sy + 14
 
+        # GENERATION MODE
         cy = self._draw_section_header("GENERATION MODE", cx, cy, sw - 28)
 
         mode_labels = {
@@ -292,17 +377,23 @@ class CSPPopup:
             )
 
         cy += 56
+
+        # SELECT CROPS
         cy = self._draw_section_header("SELECT CROPS", cx, cy, sw - 28)
 
         crop_rows = [
             (CROP_WHEAT, "Wheat", (230, 200, 60)),
             (CROP_SUNFLOWER, "Sunflower", (255, 180, 0)),
             (CROP_CORN, "Corn", (160, 210, 60)),
+            (CROP_TOMATO, "Tomato", (220, 40, 40)),
+            (CROP_CARROT, "Carrot", (255, 140, 40)),
         ]
         for crop, name, color in crop_rows:
             row_y = cy
             controls = self.crop_controls[crop]
-            pygame.draw.rect(self.screen, color, (cx, row_y + 4, 14, 14), border_radius=3)
+            pygame.draw.rect(
+                self.screen, color, (cx, row_y + 4, 14, 14), border_radius=3
+            )
             label_color = (210, 210, 200) if self.mode == "manual" else (140, 140, 140)
             label = self.font_stat.render(name, True, label_color)
             self.screen.blit(label, (cx + 22, row_y))
@@ -323,15 +414,21 @@ class CSPPopup:
 
             value_rect = controls["value"]
             pygame.draw.rect(self.screen, (55, 44, 30), value_rect, border_radius=6)
-            pygame.draw.rect(self.screen, self.wood_dark, value_rect, 1, border_radius=6)
+            pygame.draw.rect(
+                self.screen, self.wood_dark, value_rect, 1, border_radius=6
+            )
             value_color = (255, 215, 0) if self.mode == "manual" else (150, 150, 150)
-            value_surf = self.font_input.render(str(self.crop_counts[crop]), True, value_color)
+            value_surf = self.font_input.render(
+                str(self.crop_counts[crop]), True, value_color
+            )
             self.screen.blit(value_surf, value_surf.get_rect(center=value_rect.center))
-            cy += 46
+            cy += 42
 
         total_limit = self._field_limit()
         if self.mode == "manual":
-            total_label = f"Selected: {self._selected_total()} / {total_limit} field tiles"
+            total_label = (
+                f"Selected: {self._selected_total()} / {total_limit} field tiles"
+            )
             total_color = (
                 (100, 220, 120)
                 if self._selected_total() <= total_limit
@@ -349,11 +446,17 @@ class CSPPopup:
             self.screen.blit(message_surf, (cx, cy))
             cy += 18
 
-        # --- Crop counts ---
+        # CROPS section
         cy += 2
-        cy = self._draw_section_header("CROPS", cx, cy, sw - 28)
+        cy = self._draw_section_header("CROPS PLACED", cx, cy, sw - 28)
 
-        crop_counts = {CROP_WHEAT: 0, CROP_SUNFLOWER: 0, CROP_CORN: 0}
+        crop_counts = {
+            CROP_WHEAT: 0,
+            CROP_SUNFLOWER: 0,
+            CROP_CORN: 0,
+            CROP_TOMATO: 0,
+            CROP_CARROT: 0,
+        }
         for crop in self.csp_solver.assign.values():
             if crop in crop_counts:
                 crop_counts[crop] += 1
@@ -364,12 +467,13 @@ class CSPPopup:
             CROP_WHEAT: ("Wheat", (230, 200, 60)),
             CROP_SUNFLOWER: ("Sunflower", (255, 180, 0)),
             CROP_CORN: ("Corn", (160, 210, 60)),
+            CROP_TOMATO: ("Tomato", (220, 40, 40)),
+            CROP_CARROT: ("Carrot", (255, 140, 40)),
         }
         bar_w = sw - 28
 
         for crop_type, (cname, ccolor) in crop_meta.items():
             count = crop_counts[crop_type]
-            # color swatch + name + count
             pygame.draw.rect(self.screen, ccolor, (cx, cy + 2, 14, 14), border_radius=3)
             label = self.font_stat.render(f"{cname}", True, (210, 210, 200))
             count_surf = self.font_stat.render(str(count), True, (255, 215, 0))
@@ -379,7 +483,6 @@ class CSPPopup:
             self._draw_bar(cx, cy, bar_w, 7, count / total_fields, ccolor)
             cy += 16
 
-        # total fill rate
         fill_pct = int(100 * total_crops / total_fields)
         total_surf = self.font_stat.render(
             f"Fill rate {total_crops}/{total_fields} ({fill_pct}%)",
@@ -393,40 +496,7 @@ class CSPPopup:
         )
         cy += 18
 
-        # --- Terrain counts ---
-        cy += 6
-        cy = self._draw_section_header("TERRAIN", cx, cy, sw - 28)
-
-        terrain_meta = {
-            TILE_WATER: ("Water", (40, 90, 160)),
-            TILE_FIELD: ("Field", (101, 67, 33)),
-            TILE_GRASS: ("Grass", (56, 95, 40)),
-            TILE_DIRT: ("Dirt", (94, 68, 42)),
-            TILE_STONE: ("Stone", (100, 100, 110)),
-            TILE_MUD: ("Mud", (85, 62, 40)),
-        }
-        terrain_counts = {t: 0 for t in terrain_meta}
-        total_tiles = 0
-        for c in range(GRID_COLS):
-            for r in range(GRID_ROWS):
-                tile = self.grid.get(c, r)
-                if tile and tile.type in terrain_counts:
-                    terrain_counts[tile.type] += 1
-                    total_tiles += 1
-        total_tiles = max(total_tiles, 1)
-
-        for tile_type, (tname, tcolor) in terrain_meta.items():
-            count = terrain_counts[tile_type]
-            pygame.draw.rect(self.screen, tcolor, (cx, cy + 2, 14, 14), border_radius=3)
-            label = self.font_stat.render(tname, True, (210, 210, 200))
-            cnt_s = self.font_stat.render(str(count), True, (200, 200, 180))
-            self.screen.blit(label, (cx + 20, cy))
-            self.screen.blit(cnt_s, (cx + bar_w - cnt_s.get_width(), cy))
-            cy += 18
-            self._draw_bar(cx, cy, bar_w, 5, count / total_tiles, tcolor)
-            cy += 10
-
-        # --- Buttons ---
+        # Buttons
         mp = pygame.mouse.get_pos()
         self.draw_wood_button(
             self.regenerate_button,
@@ -439,8 +509,6 @@ class CSPPopup:
             self.confirm_button.collidepoint(mp),
             accent=True,
         )
-
-    # ── grid preview ─────────────────────────────────────────────────────────
 
     def draw_grid_preview(self, start_x, start_y, area_w, area_h):
         cell_size = min(area_w // GRID_COLS, area_h // GRID_ROWS, 20)
@@ -463,7 +531,6 @@ class CSPPopup:
             CROP_CORN: (160, 210, 60),
             CROP_TOMATO: (220, 40, 40),
             CROP_CARROT: (255, 140, 40),
-            CROP_POTATO: (180, 140, 80),
         }
 
         for c in range(GRID_COLS):
@@ -485,7 +552,6 @@ class CSPPopup:
                     self.screen, color, (x, y, cell_size - 1, cell_size - 1)
                 )
 
-        # thin border around entire preview
         pygame.draw.rect(self.screen, self.wood_dark, (gx, gy, total_w, total_h), 1)
 
     def is_confirmed(self):

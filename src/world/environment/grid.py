@@ -21,13 +21,19 @@ from utils.constants import SEASON_DURATION
 
 # Load mud puddle sprite (global cache)
 MUD_PUDDLE_SPRITE = None
+
+
 def _get_mud_puddle_sprite():
     global MUD_PUDDLE_SPRITE
     if MUD_PUDDLE_SPRITE is not None:
         return MUD_PUDDLE_SPRITE
     puddle_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-        "assets", "tiles", "mud_puddle.png"
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ),
+        "assets",
+        "tiles",
+        "mud_puddle.png",
     )
     if os.path.exists(puddle_path):
         try:
@@ -44,15 +50,22 @@ def _get_mud_puddle_sprite():
     MUD_PUDDLE_SPRITE = None
     return None
 
+
 # Load snow stone sprite (global cache)
 SNOW_STONE_SPRITE = None
+
+
 def _get_snow_stone_sprite():
     global SNOW_STONE_SPRITE
     if SNOW_STONE_SPRITE is not None:
         return SNOW_STONE_SPRITE
     path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-        "assets", "tiles", "Snow_Stone.png"
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ),
+        "assets",
+        "tiles",
+        "Snow_Stone.png",
     )
     if os.path.exists(path):
         try:
@@ -68,15 +81,22 @@ def _get_snow_stone_sprite():
     SNOW_STONE_SPRITE = None
     return None
 
+
 # Load winter snow sprite (global cache)
 WINTER_SNOW_SPRITE = None
+
+
 def _get_winter_snow_sprite():
     global WINTER_SNOW_SPRITE
     if WINTER_SNOW_SPRITE is not None:
         return WINTER_SNOW_SPRITE
     path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-        "assets", "tiles", "Winter_Snow.png"
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ),
+        "assets",
+        "tiles",
+        "Winter_Snow.png",
     )
     if os.path.exists(path):
         try:
@@ -91,6 +111,57 @@ def _get_winter_snow_sprite():
             pass
     WINTER_SNOW_SPRITE = None
     return None
+
+
+# Load Tomato and Carrot sprites ONLY
+TOMATO_CARROT_SPRITES = None
+
+
+def _get_tomato_carrot_sprites():
+    """Load Tomato and Carrot sprites from items.png"""
+    global TOMATO_CARROT_SPRITES
+    if TOMATO_CARROT_SPRITES is not None:
+        return TOMATO_CARROT_SPRITES
+
+    # USE THIS SIMPLE PATH - CHANGE THIS LINE
+    sprite_path = "assets/crops/items.png"
+
+    if os.path.exists(sprite_path):
+        try:
+            sheet = pygame.image.load(sprite_path).convert_alpha()
+            sprite_w = sheet.get_width() // 5
+            sprite_h = sheet.get_height() // 3
+
+            TOMATO_CARROT_SPRITES = {}
+
+            # Carrot at column 2, Tomato at column 3 (row 0)
+            crop_sprites = {
+                CROP_CARROT: sheet.subsurface((2 * sprite_w, 0, sprite_w, sprite_h)),
+                CROP_TOMATO: sheet.subsurface((3 * sprite_w, 0, sprite_w, sprite_h)),
+            }
+
+            for crop, sprite in crop_sprites.items():
+                TOMATO_CARROT_SPRITES[crop] = pygame.transform.smoothscale(
+                    sprite, (TILE_SIZE - 10, TILE_SIZE - 10)
+                )
+
+            print(f"✅ Tomato and Carrot sprites loaded from: {sprite_path}")
+            return TOMATO_CARROT_SPRITES
+        except Exception as e:
+            print(f"Could not load crop sprites: {e}")
+            TOMATO_CARROT_SPRITES = None
+            return None
+    else:
+        print(f"Crop sprite sheet NOT found at: {sprite_path}")
+        print(f"Current working directory: {os.getcwd()}")
+        # Try to list what's in assets/crops folder
+        if os.path.exists("assets/crops"):
+            print(f"Files in assets/crops: {os.listdir('assets/crops')}")
+        else:
+            print("assets/crops folder does not exist!")
+        TOMATO_CARROT_SPRITES = None
+        return None
+
 
 sys.path.insert(
     0,
@@ -123,6 +194,8 @@ from utils.constants import (
     CROP_WHEAT,
     CROP_SUNFLOWER,
     CROP_CORN,
+    CROP_TOMATO,
+    CROP_CARROT,
     CROP_COLOR,
     CROP_GLOW_COLOR,
     C_TILE_HOVER_BORDER,
@@ -191,8 +264,6 @@ def _surface_has_visible_pixels(surface):
             if surface.get_at((x, y)).a > 0:
                 return True
     return False
-
-
 
 
 # ── Baked texture data per tile ───────────────────────────────────────────────
@@ -275,6 +346,7 @@ def _bake_water(col, row):
 def _bake_snow_stone(col, row):
     """Snow stone uses sprite — minimal bake data."""
     return {}
+
 
 def _bake_dark_mud(col, row):
     """Dark mud: heavier clumps + puddle overlay."""
@@ -387,7 +459,14 @@ class Tile:
         # NOTE: Keep this conservative; CSP/season/time functions prune further.
         if self.type in (TILE_FIELD, TILE_DIRT):
             # Fields and dirt can host core crops
-            return [CROP_WHEAT, CROP_SUNFLOWER, CROP_CORN, CROP_NONE]
+            return [
+                CROP_WHEAT,
+                CROP_SUNFLOWER,
+                CROP_CORN,
+                CROP_TOMATO,
+                CROP_CARROT,
+                CROP_NONE,
+            ]
         if self.type == TILE_GRASS:
             # Grass supports fewer plant types (for example: flower/herb)
             # We include corn/wheat as disallowed here to encourage CSP to prefer fields.
@@ -469,19 +548,12 @@ class Tile:
             self.domain = list(self.base_domain)
 
     def prune_for_season(self, season_index: int):
-        """
-        Prune domain based on season index.
-        Convention: 0=spring, 1=summer, 2=autumn, 3=winter (matches SEASON_TINTS usage).
-        Winter removes heat-loving crops (e.g., corn).
-        """
         if self.flooded:
             return
-        # start from base domain and prune into domain
         allowed = list(self.base_domain)
-        # Winter restriction: only corn is plantable.
+        # Winter restriction: only corn and carrot are plantable
         if season_index == 3:
-            allowed = [v for v in allowed if v in (CROP_NONE, CROP_CORN)]
-        # other seasons could re-enable additional crops; here we simply assign allowed
+            allowed = [v for v in allowed if v in (CROP_NONE, CROP_CORN, CROP_CARROT)]
         self.domain = allowed
 
     def prune_for_time_of_day(self, is_night: bool, distance_from_farmer: int = 0):
@@ -513,7 +585,7 @@ class Grid:
         for c in range(self.cols):
             for r in range(self.rows):
                 t = self.tiles[c][r]
-                if getattr(t, 'flooded', False):
+                if getattr(t, "flooded", False):
                     t.set_flooded(False)
                     t.set_type(TILE_DARK_MUD)
                     t.set_muddy(False)
@@ -523,6 +595,9 @@ class Grid:
         self.cols = GRID_COLS
         self.rows = GRID_ROWS
         self.tiles = [[Tile(c, r) for r in range(self.rows)] for c in range(self.cols)]
+
+        # NEW: Add season reference (will be set by Game)
+        self.season = None
 
         # NEW: Add buildings list
         self.buildings = []
@@ -676,15 +751,21 @@ class Grid:
 
     def generate_random_crops(self, count):
         """Generate 'count' random crops on field tiles (no CSP)"""
-        from utils.constants import CROP_WHEAT, CROP_SUNFLOWER, CROP_CORN, CROP_TOMATO, CROP_CARROT, CROP_POTATO
-        
+        from utils.constants import (
+            CROP_WHEAT,
+            CROP_SUNFLOWER,
+            CROP_CORN,
+            CROP_TOMATO,
+            CROP_CARROT,
+        )
+
         # Clear all existing crops
         for c in range(self.cols):
             for r in range(self.rows):
                 if self.tiles[c][r].crop != CROP_NONE:
                     self.tiles[c][r].crop = CROP_NONE
                     self.tiles[c][r].crop_stage = 0
-        
+
         # Get list of all field tiles
         field_tiles = [
             (c, r)
@@ -692,14 +773,14 @@ class Grid:
             for r in range(self.rows)
             if self.tiles[c][r].type == TILE_FIELD
         ]
-        
+
         # Randomly select tiles for crops
         if len(field_tiles) < count:
             count = len(field_tiles)
-        
+
         selected_tiles = random.sample(field_tiles, count)
-        crop_types = [CROP_WHEAT, CROP_SUNFLOWER, CROP_CORN, CROP_TOMATO, CROP_CARROT, CROP_POTATO]
-        
+        crop_types = [CROP_WHEAT, CROP_SUNFLOWER, CROP_CORN, CROP_TOMATO, CROP_CARROT]
+
         for c, r in selected_tiles:
             crop_type = random.choice(crop_types)
             self.tiles[c][r].crop = crop_type
@@ -723,7 +804,12 @@ class Grid:
         for c in range(self.cols):
             for r in range(self.rows):
                 t = self.tiles[c][r]
-                if season_index == 3 and t.type in (TILE_GRASS, TILE_FIELD, TILE_DIRT, TILE_MUD) and snow_count < 20 and rng_snow.random() < 0.25:
+                if (
+                    season_index == 3
+                    and t.type in (TILE_GRASS, TILE_FIELD, TILE_DIRT, TILE_MUD)
+                    and snow_count < 20
+                    and rng_snow.random() < 0.25
+                ):
                     t._pre_snow_type = t.type
                     t.set_type(TILE_WINTER_SNOW)
                     t.snow_timer = 300  # 5 seconds
@@ -743,7 +829,11 @@ class Grid:
                         n = self.get(c + dc, r + dr)
                         if n and n.type in (TILE_DIRT, TILE_GRASS):
                             new_mud.append((c + dc, r + dr))
-                if t.type == TILE_FIELD and t.crop == CROP_NONE and random.random() < 0.05:
+                if (
+                    t.type == TILE_FIELD
+                    and t.crop == CROP_NONE
+                    and random.random() < 0.05
+                ):
                     new_mud.append((c, r))
 
                 # Flooding heuristic: if tile is Field or Dirt and adjacent to water, chance to flood
@@ -818,9 +908,16 @@ class Grid:
                 t.frozen = False
                 if t.type == TILE_SNOW_STONE:
                     t.set_type(TILE_STONE)
-                if t._winter_slush or t._pre_freeze_type != -1 or t.type == TILE_WINTER_SNOW or getattr(t, 'snow_timer', 0) > 0:
+                if (
+                    t._winter_slush
+                    or t._pre_freeze_type != -1
+                    or t.type == TILE_WINTER_SNOW
+                    or getattr(t, "snow_timer", 0) > 0
+                ):
                     # Start mud_puddle phase
-                    t._pre_thaw_type = t._pre_freeze_type if t._pre_freeze_type != -1 else t.type
+                    t._pre_thaw_type = (
+                        t._pre_freeze_type if t._pre_freeze_type != -1 else t.type
+                    )
                     t.set_type(TILE_MUD)
                     t._thaw_stage = 1
                     t._thaw_timer = 600  # 10 seconds mud_puddle
@@ -855,10 +952,18 @@ class Grid:
 
                 elif t._thaw_stage == 2:
                     # Stage 2 done: dirt -> original type
-                    original = getattr(t, '_pre_thaw_type', t._pre_freeze_type if t._pre_freeze_type is not None else TILE_GRASS)
+                    original = getattr(
+                        t,
+                        "_pre_thaw_type",
+                        (
+                            t._pre_freeze_type
+                            if t._pre_freeze_type is not None
+                            else TILE_GRASS
+                        ),
+                    )
                     t.set_type(original)
-                    if hasattr(t, '_pre_thaw_type'):
-                        delattr(t, '_pre_thaw_type')
+                    if hasattr(t, "_pre_thaw_type"):
+                        delattr(t, "_pre_thaw_type")
                     t._pre_freeze_type = -1
                     t._thaw_stage = 0
                     t._thaw_timer = 0
@@ -869,7 +974,13 @@ class Grid:
 
     # ── Tick / time helpers (new) ─────────────────────────────────────────────
 
-    def update_tick(self, tick: int, is_night: bool = False, season_index: int | None = None, farmer_pos: tuple[int, int] | None = None):
+    def update_tick(
+        self,
+        tick: int,
+        is_night: bool = False,
+        season_index: int | None = None,
+        farmer_pos: tuple[int, int] | None = None,
+    ):
         """
         Call this from the main loop once per simulation tick (or at a coarser rate).
         Responsibilities:
@@ -923,7 +1034,7 @@ class Grid:
                     t.prune_for_season(season_index)
                 t.prune_for_time_of_day(is_night, dist)
 
-    # ─�� Hover helper ──────────────────────────────────────────────────────────
+    # ── Hover helper ──────────────────────────────────────────────────────────
 
     def update_hover(self, mouse_pos):
         """Call each frame with pygame.mouse.get_pos()."""
@@ -1013,7 +1124,9 @@ class Grid:
 
         # Winter freeze tint
         if getattr(t, "frozen", False) and t.type != TILE_WATER:
-            base = tuple(int(base[i] * 0.55 + (180, 210, 235)[i] * 0.45) for i in range(3))
+            base = tuple(
+                int(base[i] * 0.55 + (180, 210, 235)[i] * 0.45) for i in range(3)
+            )
             hi = tuple(int(hi[i] * 0.50 + (220, 235, 250)[i] * 0.50) for i in range(3))
 
         tile_rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
@@ -1055,7 +1168,12 @@ class Grid:
                 # Ice rendering — light blue solid with cracks
                 ice_base = (180, 210, 240)
                 ice_hi = (220, 240, 255)
-                pygame.draw.rect(surface, ice_base, (x, y, TILE_SIZE, TILE_SIZE), border_radius=TILE_RADIUS)
+                pygame.draw.rect(
+                    surface,
+                    ice_base,
+                    (x, y, TILE_SIZE, TILE_SIZE),
+                    border_radius=TILE_RADIUS,
+                )
                 # Ice sheen
                 sheen = pygame.Surface((TILE_SIZE, TILE_SIZE // 2), pygame.SRCALPHA)
                 sheen.fill((255, 255, 255, 30))
@@ -1192,7 +1310,9 @@ class Grid:
                     # fallback: draw blue puddle as before
                     pud_surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
                     puddle_color = (110, 130, 160, 210)
-                    pygame.draw.ellipse(pud_surf, puddle_color, (4, 8, TILE_SIZE-8, TILE_SIZE-12))
+                    pygame.draw.ellipse(
+                        pud_surf, puddle_color, (4, 8, TILE_SIZE - 8, TILE_SIZE - 12)
+                    )
                     surface.blit(pud_surf, (x, y))
 
         elif t.type == TILE_DARK_MUD:
@@ -1213,7 +1333,9 @@ class Grid:
                 clump_color = (45, 25, 10)
                 pygame.draw.ellipse(surface, clump_color, (x + cx, y + cy, cw, ch))
                 # Clump highlight
-                pygame.draw.ellipse(surface, (70, 45, 25), (x + cx + 1, y + cy + 1, cw//2, ch//2))
+                pygame.draw.ellipse(
+                    surface, (70, 45, 25), (x + cx + 1, y + cy + 1, cw // 2, ch // 2)
+                )
             # Always puddle overlay on dark mud (post-flood look)
             puddle_img = _get_mud_puddle_sprite()
             if puddle_img:
@@ -1226,7 +1348,9 @@ class Grid:
                 # Darker puddle fallback
                 pud_surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
                 puddle_color = (80, 60, 30, 220)  # dark brown puddle
-                pygame.draw.ellipse(pud_surf, puddle_color, (6, 10, TILE_SIZE-12, TILE_SIZE-16))
+                pygame.draw.ellipse(
+                    pud_surf, puddle_color, (6, 10, TILE_SIZE - 12, TILE_SIZE - 16)
+                )
                 surface.blit(pud_surf, (x, y))
 
         elif t.type == TILE_SNOW_STONE:
@@ -1235,8 +1359,15 @@ class Grid:
                 surface.blit(sprite, (x, y))
             else:
                 # Fallback: white-tinted stone
-                pygame.draw.rect(surface, (200, 210, 220), tile_rect, border_radius=TILE_RADIUS)
-                pygame.draw.circle(surface, (230, 235, 240), (x + TILE_SIZE // 2, y + TILE_SIZE // 2), 12)
+                pygame.draw.rect(
+                    surface, (200, 210, 220), tile_rect, border_radius=TILE_RADIUS
+                )
+                pygame.draw.circle(
+                    surface,
+                    (230, 235, 240),
+                    (x + TILE_SIZE // 2, y + TILE_SIZE // 2),
+                    12,
+                )
 
         elif t.type == TILE_WINTER_SNOW:
             sprite = _get_winter_snow_sprite()
@@ -1244,9 +1375,15 @@ class Grid:
                 surface.blit(sprite, (x, y))
             else:
                 # Fallback: light snow color
-                pygame.draw.rect(surface, (220, 230, 245), tile_rect, border_radius=TILE_RADIUS)
+                pygame.draw.rect(
+                    surface, (220, 230, 245), tile_rect, border_radius=TILE_RADIUS
+                )
                 # Small snow mound
-                pygame.draw.ellipse(surface, (240, 245, 255), (x + 8, y + 12, TILE_SIZE - 16, TILE_SIZE - 20))
+                pygame.draw.ellipse(
+                    surface,
+                    (240, 245, 255),
+                    (x + 8, y + 12, TILE_SIZE - 16, TILE_SIZE - 20),
+                )
 
         # ── Water edge blending ───────────────────────────────────────────────
         if t.type == TILE_WATER:
@@ -1292,6 +1429,7 @@ class Grid:
             frost.fill((210, 235, 255, 50))
             # Snow dots
             import random as _rng
+
             seed = t.col * 31 + t.row * 17
             for i in range(4):
                 sx = (seed * (i + 1) * 7) % (TILE_SIZE - 4) + 2
@@ -1302,24 +1440,30 @@ class Grid:
     # ── Crop drawing ──────────────────────────────────────────────────────────
 
     def _draw_crop(self, surface, t: Tile, x: int, y: int, tick: int):
+        # ONLY Tomato and Carrot use sprites at stage 3 (fully grown)
+        if t.crop in (CROP_TOMATO, CROP_CARROT) and t.crop_stage >= 3:
+            sprites = _get_tomato_carrot_sprites()
+            if sprites and t.crop in sprites:
+                sprite = sprites[t.crop]
+                sx = x + (TILE_SIZE - sprite.get_width()) // 2
+                sy = y + (TILE_SIZE - sprite.get_height()) // 2 - 5
+                surface.blit(sprite, (sx, sy))
+                return  # Don't draw anything else for Tomato/Carrot
+
+        # For ALL other crops (Wheat, Sunflower, Corn) use drawn graphics
         cc = CROP_COLOR[t.crop]
         cx = x + TILE_SIZE // 2
         cy = y + TILE_SIZE // 2
 
         if t.crop_stage == 0:
-            # Seed — small round dot with highlight
             pygame.draw.circle(surface, (195, 160, 95), (cx, cy), 4)
             pygame.draw.circle(surface, (220, 195, 135), (cx - 1, cy - 1), 2)
-
         elif t.crop_stage == 1:
-            # Sprout — thin stem + two leaves
             stem_top = (cx, cy - 8)
             pygame.draw.line(surface, (90, 165, 55), (cx, cy + 5), stem_top, 2)
             pygame.draw.line(surface, (90, 165, 55), stem_top, (cx - 6, cy - 1), 2)
             pygame.draw.line(surface, (90, 165, 55), stem_top, (cx + 6, cy - 1), 2)
-
         elif t.crop_stage == 2:
-            # Mid-growth — thicker stem + bud
             stem_top = (cx, cy - 12)
             pygame.draw.line(surface, (75, 148, 42), (cx, cy + 6), stem_top, 3)
             pygame.draw.circle(surface, cc, stem_top, 5)
@@ -1329,9 +1473,7 @@ class Grid:
                 (stem_top[0] - 1, stem_top[1] - 1),
                 2,
             )
-
         else:
-            # Stage 3 — fully grown, type-specific
             self._draw_mature_crop(surface, t, x, y, cx, cy, tick)
 
     def _draw_mature_crop(self, surface, t: Tile, x, y, cx, cy, tick):

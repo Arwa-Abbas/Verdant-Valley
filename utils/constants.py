@@ -167,8 +167,7 @@ TILE_RADIUS = 3
     CROP_CORN,
     CROP_TOMATO,
     CROP_CARROT,
-    CROP_POTATO,
-) = (0, 1, 2, 3, 4, 5, 6)
+) = (0, 1, 2, 3, 4, 5)
 
 CROP_NAMES = {
     0: "Empty",
@@ -177,17 +176,15 @@ CROP_NAMES = {
     3: "Corn",
     4: "Tomato",
     5: "Carrot",
-    6: "Potato",
 }
 
 CROP_COLOR = {
     0: (70, 55, 30),
-    1: (230, 200, 60),
-    2: (255, 190, 20),
-    3: (160, 210, 50),
-    4: (220, 40, 40),
-    5: (255, 140, 40),
-    6: (180, 140, 80),
+    1: (230, 200, 60),  # Wheat gold
+    2: (255, 190, 20),  # Sunflower yellow
+    3: (160, 210, 50),  # Corn green
+    4: (220, 40, 40),  # Tomato red
+    5: (255, 140, 40),  # Carrot orange
 }
 
 CROP_GLOW_COLOR = {
@@ -196,10 +193,16 @@ CROP_GLOW_COLOR = {
     CROP_CORN: (160, 200, 40, 55),
     CROP_TOMATO: (200, 30, 30, 55),
     CROP_CARROT: (230, 120, 20, 55),
-    CROP_POTATO: (160, 120, 60, 55),
 }
 
-CROP_VALUE = {0: 0, 1: 10, 2: 20, 3: 15, 4: 25, 5: 18, 6: 12}
+CROP_VALUE = {
+    0: 0,
+    1: 10,  # Wheat
+    2: 20,  # Sunflower
+    3: 15,  # Corn
+    4: 25,  # Tomato (highest value)
+    5: 18,  # Carrot
+}
 
 # ============================================================================
 # UI & HOVER EFFECTS

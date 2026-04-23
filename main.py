@@ -27,6 +27,8 @@ from utils.constants import (
     CROP_WHEAT,
     CROP_SUNFLOWER,
     CROP_CORN,
+    CROP_TOMATO,
+    CROP_CARROT,
 )
 from src.world.environment.grid import Grid
 from src.world.environment.season import SeasonManager
@@ -523,8 +525,8 @@ class Game:
         self.previous_crop_count = 0
         self.initial_crops = 0
         self.crops_left = 0
-        # Flips True once crops exist this cycle; resets after popup fires.
         self._field_was_populated = False
+        self._waiting_for_regeneration = False
         self.regeneration_mode = None
 
         # Screens
@@ -534,7 +536,6 @@ class Game:
 
     #  Game initialisation
     def init_game(self):
-
         # Initialize all attributes to None first
         self.grid = None
         self.season = None
@@ -553,6 +554,7 @@ class Game:
         self.initial_crops = 0
         self.crops_left = 0
         self._field_was_populated = False
+        self._waiting_for_regeneration = False
         self.regeneration_mode = None
         self.completed_seasons = 0
         self.last_season_index = 0
@@ -565,6 +567,10 @@ class Game:
             self.grid = Grid()
             self.rain_animation = RainAnimation(self.grid)
             self.season = SeasonManager()
+
+            # NEW: Link season to grid so CSP can check winter
+            self.grid.season = self.season
+
             if self.season and self.grid:
                 self.season.apply_current_effects(self.grid)
                 self.last_season_index = getattr(self.season, "index", 0)
@@ -601,10 +607,7 @@ class Game:
             if self.animal_rabbit and self.grid:
                 self.animal_rabbit.ensure_valid_position(self.grid)
 
-            # FIXED: Changed from bear to fox, updated spawn positions for 18×14 grid
-            self.animal_fox = Animal(
-                17, 1, animal_type="fox"
-            )  # Last column (0-17 = 18 columns)
+            self.animal_fox = Animal(17, 1, animal_type="fox")
             if self.animal_fox and self.grid:
                 spawn = self._random_spawn(self.grid)
                 if isinstance(spawn, (tuple, list)) and len(spawn) == 2:
@@ -615,18 +618,14 @@ class Game:
                 if isinstance(spawn, (tuple, list)) and len(spawn) == 2:
                     self.animal_rabbit.respawn(spawn[0], spawn[1], self.grid)
 
-            # FIXED: Updated guard waypoints for 18×14 grid
             if self.guard:
-                self.guard.set_waypoints(
-                    [(4, 2), (17, 2), (17, 13), (4, 13)]
-                )  # max_col=17, max_row=13
+                self.guard.set_waypoints([(4, 2), (17, 2), (17, 13), (4, 13)])
             self.agents = [
                 a
                 for a in [self.farmer, self.guard, self.animal_fox, self.animal_rabbit]
                 if a
             ]
 
-            # Reset crop tracking
             if self.grid and hasattr(self.grid, "crop_tiles"):
                 self.initial_crops = len(self.grid.crop_tiles())
             else:
@@ -634,7 +633,6 @@ class Game:
             self.crops_left = self.initial_crops
             self._field_was_populated = self.initial_crops > 0
 
-            # DEBUG: Print grid size to verify
             print(
                 f"✅ GRID INITIALIZED: {self.grid.cols} columns × {self.grid.rows} rows"
             )
@@ -642,7 +640,6 @@ class Game:
 
         except Exception as e:
             print(f"Game initialization error: {e}")
-            # Optionally: log or handle error
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -655,6 +652,11 @@ class Game:
         self.initial_crops = current_crop_count
         self.crops_left = current_crop_count
         self._field_was_populated = current_crop_count > 0
+        if current_crop_count > 0:
+            self._waiting_for_regeneration = False
+        print(
+            f"[SYNC] Crop count: {current_crop_count}, _field_was_populated: {self._field_was_populated}"
+        )
 
     def _show_generation_popup(self):
         self.regeneration_popup = RegenerationPopup(
@@ -672,6 +674,7 @@ class Game:
         )
 
     def _apply_auto_generation(self):
+        self._waiting_for_regeneration = False
         if (
             self.csp_solver
             and hasattr(self.csp_solver, "solve")
@@ -686,7 +689,6 @@ class Game:
         )
 
     def _no_popup_active(self):
-        """True when no overlay popup is currently shown."""
         return (
             self.notification_popup is None
             and self.regeneration_popup is None
@@ -695,7 +697,6 @@ class Game:
 
     def choose_animal_respawn(self):
         guard_pos = (self.guard.col, self.guard.row) if self.guard else None
-        # FIXED: Updated for 18×14 grid (max_col=17, max_row=13)
         min_col, max_col, min_row, max_row = 4, 17, 2, 13
         safe_tiles = []
         if not self.grid:
@@ -736,7 +737,6 @@ class Game:
 
     @staticmethod
     def _random_spawn(grid):
-        """Pick a random valid (non-water, non-stone) spawn tile."""
         candidates = []
         if (
             not grid
@@ -829,7 +829,6 @@ class Game:
             pygame.draw.circle(self.screen, color, (dot_x, dot_y), 4)
 
     def draw_season_info(self):
-        # HEAD panel size (larger, with money row)
         panel_w = 210
         panel_h = 110
         panel_x = 15
@@ -856,7 +855,6 @@ class Game:
             (panel_x + 12, panel_y + 10),
         )
 
-        # Use SeasonManager day_count if available, else derive from tick
         day = (
             getattr(self.season, "day_count", None)
             if self.season
@@ -885,7 +883,6 @@ class Game:
         )
 
     def draw_change_season_button(self, enabled=True):
-        """Draw manual season switch button in top-right corner."""
         btn_width = 190
         btn_height = 40
         btn_x = SCREEN_W - btn_width - 20
@@ -937,7 +934,6 @@ class Game:
         self.screen.blit(overlay, (0, 0))
 
     def draw_season_fullscreen_overlay(self):
-        """Apply season tint to the full scene."""
         if not self.season:
             return
         tint_color = SEASON_TINTS.get(self.season.index % len(SEASON_TINTS))
@@ -997,7 +993,6 @@ class Game:
         )
 
     def draw_rain_button(self):
-        """Draw the rain button below the plant button."""
         btn_width = 140
         btn_height = 45
         btn_x = SCREEN_W - btn_width - 20
@@ -1028,7 +1023,6 @@ class Game:
         )
 
     def draw_snow_button(self):
-        """Draw the snow/freeze toggle button below the rain button."""
         btn_width = 140
         btn_height = 45
         btn_x = SCREEN_W - SIDEBAR_W + 20
@@ -1056,7 +1050,6 @@ class Game:
         )
 
     def _draw_game_world(self):
-        """Shared draw call for PLAYING and PAUSED states."""
         self.screen.fill((34, 139, 34))
         if self.grid and hasattr(self.grid, "draw") and self.season:
             self.grid.draw(
@@ -1069,7 +1062,6 @@ class Game:
         self.draw_season_info()
         self.draw_minimap()
 
-        # Draw rain animation on top
         if self.rain_animation:
             self.rain_animation.draw(self.screen)
 
@@ -1080,7 +1072,6 @@ class Game:
             self.clock.tick(FPS)
             self.clock_obj.update()
 
-            # ── Events ───────────────────────────────────────────────────────
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
@@ -1135,16 +1126,17 @@ class Game:
                                 print("🌱 Plant crops triggered by G key!")
 
                     if event.type == pygame.MOUSEBUTTONDOWN:
-                        # Manual season change button
+                        # Manual season change button - REMOVED CSP CALL
                         if (
                             self.change_season_button_rect
                             and self.change_season_button_rect.collidepoint(event.pos)
                             and self.season
                         ):
                             self.season.advance_manual(self.grid)
-                            if self.csp_solver:
-                                self.csp_solver.solve()
-                                self.csp_solver.apply_to_grid()
+                            # REMOVED: CSP auto-generation on season change
+                            # if self.csp_solver:
+                            #     self.csp_solver.solve()
+                            #     self.csp_solver.apply_to_grid()
                             print(f"🔁 Manual season change -> {self.season.name}")
 
                         # Plant button
@@ -1157,19 +1149,21 @@ class Game:
                                 self.farmer.trigger_planting()
                                 print("🌱 Plant crops triggered by button!")
 
-                        # Rain button
+                        # Rain button - REMOVED CSP CALL
                         if (
                             self.rain_button_rect
                             and self.rain_button_rect.collidepoint(event.pos)
                         ):
                             if self.grid and self.season:
+                                print("🔴 RAIN BUTTON CLICKED!")
                                 self.season.trigger_rain(self.grid)
-                                # Start rain animation
                                 if self.rain_animation:
+                                    print("🔴 STARTING RAIN ANIMATION!")
                                     self.rain_animation.start()
-                                if self.csp_solver:
-                                    self.csp_solver.solve()
-                                    self.csp_solver.apply_to_grid()
+                                # REMOVED: CSP auto-generation on rain
+                                # if self.csp_solver:
+                                #     self.csp_solver.solve()
+                                #     self.csp_solver.apply_to_grid()
                                 print("🌧 Rain triggered by button!")
 
                     # ── Regeneration popup clicks ─────────────────────────
@@ -1193,8 +1187,12 @@ class Game:
                                     CROP_WHEAT: 0,
                                     CROP_SUNFLOWER: 0,
                                     CROP_CORN: 0,
+                                    CROP_TOMATO: 0,
+                                    CROP_CARROT: 0,
                                 },
-                                allowed_crops=[CROP_CORN] if winter_only else None,
+                                allowed_crops=(
+                                    [CROP_CORN, CROP_CARROT] if winter_only else None
+                                ),
                             )
                             self.regeneration_popup = None
 
@@ -1204,6 +1202,8 @@ class Game:
                             self.custom_input_popup.handle_keypress(event.key)
                         elif event.type == pygame.MOUSEBUTTONDOWN:
                             self.custom_input_popup.handle_click(event.pos)
+                            if self.custom_input_popup.submitted:
+                                self._waiting_for_regeneration = False
 
                     # ── Notification popup events ─────────────────────────
                     if self.notification_popup:
@@ -1255,11 +1255,14 @@ class Game:
                 day_night_flipped = False
                 if self.season and hasattr(self.season, "update") and self.grid:
                     day_night_flipped = self.season.update(self.grid, self.clock_obj)
-                if day_night_flipped and self.csp_solver:
-                    if hasattr(self.csp_solver, "solve"):
-                        self.csp_solver.solve()
-                    if hasattr(self.csp_solver, "apply_to_grid"):
-                        self.csp_solver.apply_to_grid()
+
+                # REMOVED: CSP auto-generation on day/night flip
+                # if day_night_flipped and self.csp_solver:
+                #     if hasattr(self.csp_solver, "solve"):
+                #         self.csp_solver.solve()
+                #     if hasattr(self.csp_solver, "apply_to_grid"):
+                #         self.csp_solver.apply_to_grid()
+
                 if self.check_end_condition():
                     animal_score = 0
                     if self.animal_fox and hasattr(self.animal_fox, "score"):
@@ -1280,13 +1283,11 @@ class Game:
                         if agent and hasattr(agent, "update"):
                             agent.update(self.grid, self.agents, self.season)
 
-                    # Update rain animation
                     if self.rain_animation:
                         rain_finished = self.rain_animation.update()
                         if rain_finished:
                             print("🌧 Rain animation finished!")
 
-                    # Respawn caught animals at random positions
                     if (
                         self.animal_fox
                         and hasattr(self.animal_fox, "alive")
@@ -1330,17 +1331,25 @@ class Game:
                     else 0
                 )
 
-                if current_crop_count > 0:
-                    self._field_was_populated = True
+                print(
+                    f"[CROP] count={current_crop_count}, _field_was_populated={self._field_was_populated}, waiting={self._waiting_for_regeneration}"
+                )
 
-                # Detect when field becomes fully empty
+                if current_crop_count > 0:
+                    if not self._field_was_populated:
+                        print("[CROP] Field became populated!")
+                    self._field_was_populated = True
+                    self._waiting_for_regeneration = False
+
                 if (
                     self._field_was_populated
                     and current_crop_count == 0
+                    and not self._waiting_for_regeneration
                     and self._no_popup_active()
                 ):
                     print("[HARVEST_TRIGGER] Grid empty — showing regeneration options")
                     self._show_generation_popup()
+                    self._waiting_for_regeneration = True
                     self._field_was_populated = False
 
                 self.previous_crop_count = current_crop_count
@@ -1352,6 +1361,7 @@ class Game:
                 if self.custom_input_popup:
                     self.custom_input_popup.update()
                     if self.custom_input_popup.submitted:
+                        self._waiting_for_regeneration = False
                         selected_counts = self.custom_input_popup.get_value()
                         if selected_counts is not None:
                             print(f"🌾 Generating custom crops: {selected_counts}")
@@ -1386,7 +1396,6 @@ class Game:
                     if hasattr(agent, "alive") and not agent.alive:
                         continue
                     agent.draw(self.screen)
-                    # Draw failed move/cross indicators for Farmer and Guard
                     if hasattr(agent, "draw_failed_plant_indicator"):
                         agent.draw_failed_plant_indicator(self.screen, self.grid)
                     if hasattr(agent, "draw_failed_move_indicator"):
@@ -1394,7 +1403,6 @@ class Game:
                     if hasattr(agent, "show_blocked_cross"):
                         agent.show_blocked_cross(self.screen, self.grid)
 
-                # Popups always drawn on top
                 if self.regeneration_popup:
                     self.regeneration_popup.draw()
                 if self.custom_input_popup:
@@ -1406,7 +1414,6 @@ class Game:
                 self._draw_game_world()
                 self.draw_change_season_button(enabled=False)
 
-                # Greyed-out plant button (disabled during pause)
                 bw, bh = 140, 45
                 bx = SCREEN_W - SIDEBAR_W + 20
                 by = 320

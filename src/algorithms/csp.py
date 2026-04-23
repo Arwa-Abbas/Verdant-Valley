@@ -14,9 +14,8 @@ CROP_HEURISTIC_VALUE = {
     CROP_WHEAT: 1.0,
     CROP_SUNFLOWER: 0.9,
     CROP_CORN: 1.3,
-    CROP_TOMATO: 1.1,
-    CROP_CARROT: 0.8,
-    CROP_POTATO: 0.85,
+    CROP_TOMATO: 1.2,
+    CROP_CARROT: 0.9,
     CROP_NONE: 0.0,
 }
 
@@ -25,10 +24,14 @@ class CSPSolver:
 
     def set_requested_counts(self, requested_counts):
         """Set the requested crop counts for the solver."""
-        self.requested_counts = requested_counts if requested_counts is not None else self._default_counts()
+        self.requested_counts = (
+            requested_counts if requested_counts is not None else self._default_counts()
+        )
+
     def get_requested_counts(self):
         """Return the current requested crop counts dict."""
-        return getattr(self, 'requested_counts', self._default_counts())
+        return getattr(self, "requested_counts", self._default_counts())
+
     def __init__(self, grid):
         self.grid = grid
         self.refresh_grid_context()
@@ -45,14 +48,15 @@ class CSPSolver:
         target_planted = max(1, int(total_fields * 0.4))
         sunflower = target_planted // 4
         corn = target_planted // 3
-        wheat = max(0, target_planted - sunflower - corn)
+        tomato = target_planted // 5
+        carrot = target_planted // 5
+        wheat = max(0, target_planted - sunflower - corn - tomato - carrot)
         return {
             CROP_WHEAT: wheat,
             CROP_SUNFLOWER: sunflower,
             CROP_CORN: corn,
-            CROP_TOMATO: 0,
-            CROP_CARROT: 0,
-            CROP_POTATO: 0,
+            CROP_TOMATO: tomato,
+            CROP_CARROT: carrot,
         }
 
     def refresh_grid_context(self):
@@ -75,31 +79,65 @@ class CSPSolver:
         col, row = pos
         return self.grid.get(col, row)
 
+    def _get_season(self):
+        """Get current season index (0=Spring, 1=Summer, 2=Autumn, 3=Winter)"""
+        if hasattr(self.grid, "season") and self.grid.season:
+            return getattr(self.grid.season, "index", 0)
+        return 0  # Default to Spring
+
+    def _get_allowed_crops_for_season(self):
+        """Return list of crops allowed in current season"""
+        season = self._get_season()
+
+        # Spring, Summer, Autumn - all crops allowed
+        if season != 3:  # Not winter
+            return [CROP_WHEAT, CROP_SUNFLOWER, CROP_CORN, CROP_TOMATO, CROP_CARROT]
+        else:  # Winter - only corn and carrot
+            return [CROP_CORN, CROP_CARROT]
+
     def _tile_allows(self, pos, crop):
-        """Return True when the tile's current domain allows planting 'crop'."""
+        """Return True when the tile can plant this crop."""
         tile = self._tile(pos)
         if tile is None:
             return False
-        # If tile.domain explicitly contains the crop, it's allowed.
-        # Domains are maintained by grid (season, flood, night, etc.)
-        return crop in getattr(tile, "domain", [CROP_NONE])
+
+        # Get allowed crops for current season
+        allowed_crops = self._get_allowed_crops_for_season()
+
+        # If crop is not allowed in this season, return False
+        if crop not in allowed_crops:
+            return False
+
+        # For winter, Corn and Carrot are always allowed on field tiles
+        season = self._get_season()
+        if season == 3 and crop in (CROP_CORN, CROP_CARROT) and tile.type == TILE_FIELD:
+            return True
+
+        # For non-winter, check if tile is field or dirt
+        if tile.type in (TILE_FIELD, TILE_DIRT):
+            return True
+
+        return False
 
     def _is_available(self, pos):
-        """Available means not yet assigned in self.assign AND the tile still allows planting (not hard-flooded/frozen)."""
+        """Available means not yet assigned and tile is plantable."""
         assigned = self.assign.get(pos, CROP_NONE)
         if assigned != CROP_NONE:
             return False
         tile = self._tile(pos)
         if not tile:
             return False
-        # Frozen tiles cannot be planted
-        if getattr(tile, "frozen", False):
-            return False
-        # If tile domain is exactly [CROP_NONE], it's hard-constrained (flooded/blocked)
-        domain = getattr(tile, "domain", [CROP_NONE])
-        if len(domain) == 1 and domain[0] == CROP_NONE:
-            return False
-        return True
+
+        # For winter, field tiles are always available for Corn/Carrot
+        season = self._get_season()
+        if season == 3 and tile.type == TILE_FIELD:
+            return True
+
+        # For non-winter, field and dirt tiles are available
+        if tile.type in (TILE_FIELD, TILE_DIRT):
+            return True
+
+        return False
 
     def _is_edge(self, col, row):
         return (
@@ -110,7 +148,6 @@ class CSPSolver:
         )
 
     def _near_water(self, col, row, radius=4):
-        # Expanded radius to 4 for better coverage (unchanged)
         for wc, wr in self.water:
             if manhattan((col, row), (wc, wr)) <= radius:
                 return True
@@ -126,33 +163,24 @@ class CSPSolver:
     # Candidate ordering utilities
     # ------------------------------
     def _score_tile_for_crop(self, pos, crop):
-        """
-        Compute a score combining:
-         - tile.utility (0..1) (higher is better),
-         - crop heuristic value (higher is better),
-         - small bonus if near water for water-loving crops.
-        """
         tile = self._tile(pos)
         if not tile:
             return -9999
         base = CROP_HEURISTIC_VALUE.get(crop, 0.0)
         utility = getattr(tile, "utility", 0.5)
         score = base * utility
-        # slight near-water boost for some crops (corn, tomato)
-        if crop in (CROP_CORN, CROP_TOMATO) and self._near_water(pos[0], pos[1], radius=3):
+        if crop in (CROP_CORN, CROP_TOMATO) and self._near_water(
+            pos[0], pos[1], radius=3
+        ):
             score *= 1.08
-        # penalize muddy tiles slightly for all crops (muddy already reduces tile.utility but add small penalty)
         if getattr(tile, "muddy", False):
             score *= 0.85
         return score
 
     def _ordered_candidates(self, positions, crop, limit=None):
-        """
-        Return candidate positions ordered by heuristic score and filtered by tile domains.
-        If `limit` provided, return at most limit best positions.
-        """
-        filtered = [p for p in positions if self._is_available(p) and self._tile_allows(p, crop)]
-        # sort by score descending
+        filtered = [
+            p for p in positions if self._is_available(p) and self._tile_allows(p, crop)
+        ]
         filtered.sort(key=lambda p: self._score_tile_for_crop(p, crop), reverse=True)
         if limit:
             return filtered[:limit]
@@ -162,7 +190,6 @@ class CSPSolver:
     # Assignment routines
     # ------------------------------
     def _assign_crop(self, positions, crop, limit):
-        """Assign crop to up to `limit` best positions from positions (which is a list of coords)."""
         placed = 0
         if limit <= 0:
             return 0
@@ -175,7 +202,6 @@ class CSPSolver:
                 continue
             if crop == CROP_SUNFLOWER and self._has_adjacent_sunflower(col, row):
                 continue
-            # Final safety check: tile still allows this crop
             if not self._tile_allows((col, row), crop):
                 continue
             self.assign[(col, row)] = crop
@@ -185,7 +211,6 @@ class CSPSolver:
         return placed
 
     def _assign_crop_relaxed(self, positions, crop, limit):
-        """Relaxed assignment ignores sunflower adjacency constraint but still respects domains/utility."""
         placed = 0
         if limit <= 0:
             return 0
@@ -208,113 +233,76 @@ class CSPSolver:
     # Auto solver (heuristic-driven)
     # ------------------------------
     def _solve_auto(self):
+        if len(self.grid.crop_tiles()) > 0:
+            print("⚠️ CSP auto-generation blocked - crops already exist on grid!")
+            return False
+
+        season = self._get_season()
+        is_winter = season == 3
+
         print(f"Solving CSP (auto) for {len(self.vars)} field tiles...")
 
-        # Initialize assignment map but respect current tile domains: if tile domain == [CROP_NONE], we keep it NONE
-        for var in self.vars:
-            # if tile permanently blocked, keep NONE; otherwise start unassigned with CROP_NONE
-            tile = self._tile(var)
-            if tile and len(getattr(tile, "domain", [CROP_NONE])) == 1 and tile.domain[0] == CROP_NONE:
-                self.assign[var] = CROP_NONE
-            else:
-                self.assign[var] = CROP_NONE
+        if is_winter:
+            print("❄️ WINTER MODE - Planting Corn and Carrot on all field tiles!")
 
-        target_planted = max(1, int(len(self.vars) * 0.4))
+            # Plant Corn and Carrot on ALL field tiles
+            field_tiles = list(self.vars)
+            random.shuffle(field_tiles)
+
+            planted = 0
+            for idx, (col, row) in enumerate(field_tiles):
+                # Alternate between Corn and Carrot
+                crop = CROP_CORN if idx % 2 == 0 else CROP_CARROT
+                self.assign[(col, row)] = crop
+                self.log.append((col, row, crop, "assign"))
+                planted += 1
+                print(f"Planted {CROP_NAMES[crop]} at ({col},{row})")
+
+            print(f"CSP Complete: Planted {planted} crops in winter")
+            return True
+
+        # NORMAL SEASONS (Spring, Summer, Autumn) - All crops allowed
+        print("🌱 NORMAL SEASON - Planting all crop types")
+
+        target_planted = max(1, int(len(self.vars) * 0.5))
         planted = 0
-
-        print(f"Target planted crops: {target_planted}")
 
         edge_tiles = [v for v in self.vars if self._is_edge(v[0], v[1])]
         inner_tiles = [v for v in self.vars if not self._is_edge(v[0], v[1])]
 
-        print(f"Edge tiles: {len(edge_tiles)}, Inner tiles: {len(inner_tiles)}")
-
-        # Prefer sunflowers on edge tiles near water or high-utility tiles
-        sf_candidates = [v for v in edge_tiles if self._is_available(v) and self._tile_allows(v, CROP_SUNFLOWER)]
-        # order by score
-        sf_candidates.sort(key=lambda p: self._score_tile_for_crop(p, CROP_SUNFLOWER), reverse=True)
+        # Plant Sunflowers on edge tiles
+        sf_candidates = [v for v in edge_tiles if self._is_available(v)]
+        sf_candidates.sort(
+            key=lambda p: self._score_tile_for_crop(p, CROP_SUNFLOWER), reverse=True
+        )
 
         for col, row in sf_candidates:
             if planted >= target_planted:
                 break
             if self._has_adjacent_sunflower(col, row):
                 continue
-            if random.random() > 0.35:  # keep some randomness
+            if random.random() > 0.35:
                 self.assign[(col, row)] = CROP_SUNFLOWER
                 self.log.append((col, row, CROP_SUNFLOWER, "assign"))
                 planted += 1
-                print(f"Planted Sunflower at ({col},{row}) - {planted}/{target_planted}")
+                print(f"Planted Sunflower at ({col},{row})")
 
+        # Fill remaining with random crops
         all_tiles = [v for v in edge_tiles + inner_tiles if self._is_available(v)]
-        # Shuffle preserves randomness but we'll score when selecting
         random.shuffle(all_tiles)
 
-        # Fill remaining by scoring tiles for best crop choice
-        while planted < target_planted and any(self._is_available(v) for v in all_tiles):
-            # produce candidate list of available tiles
-            available = [v for v in all_tiles if self._is_available(v)]
-            # for each available tile, compute best crop by score
-            scored = []
-            for v in available:
-                # pick highest scoring crop that's allowed in the tile's domain
-                tile = self._tile(v)
-                domain = getattr(tile, "domain", [])
-                best_crop = None
-                best_score = -1.0
-                for crop in domain:
-                    if crop == CROP_NONE:
-                        continue
-                    score = self._score_tile_for_crop(v, crop)
-                    if score > best_score:
-                        best_score = score
-                        best_crop = crop
-                if best_crop is not None:
-                    scored.append((v, best_crop, best_score))
-            # sort by score descending
-            scored.sort(key=lambda t: t[2], reverse=True)
-            if not scored:
+        crop_types = [CROP_WHEAT, CROP_CORN, CROP_TOMATO, CROP_CARROT]
+
+        for col, row in all_tiles:
+            if planted >= target_planted:
                 break
-            # assign top candidate
-            pos, best_crop, _ = scored[0]
-            if best_crop == CROP_SUNFLOWER and self._has_adjacent_sunflower(pos[0], pos[1]):
-                # if sunflower adjacency blocks, fallback to next best
-                if len(scored) > 1:
-                    pos, best_crop, _ = scored[1]
-                else:
-                    break
-            self.assign[pos] = best_crop
-            self.log.append((pos[0], pos[1], best_crop, "assign"))
+            if self.assign.get((col, row), CROP_NONE) != CROP_NONE:
+                continue
+            crop = random.choice(crop_types)
+            self.assign[(col, row)] = crop
+            self.log.append((col, row, crop, "assign"))
             planted += 1
-            print(f"Planted {CROP_NAMES[best_crop]} at {pos} - {planted}/{target_planted}")
-
-        # final fill pass if needed
-        if planted < target_planted:
-            print(f"Need {target_planted - planted} more crops, final pass...")
-            remaining = [v for v in all_tiles if self._is_available(v)]
-            # order remaining by tile.utility so higher quality tiles fill first
-            remaining.sort(key=lambda p: getattr(self._tile(p), "utility", 0.5), reverse=True)
-            for col, row in remaining:
-                if planted >= target_planted:
-                    break
-                # choose any allowed crop by score
-                tile = self._tile((col, row))
-                domain = getattr(tile, "domain", [])
-                choices = [c for c in domain if c != CROP_NONE]
-                if not choices:
-                    continue
-                # pick best by heuristic
-                choices.sort(key=lambda c: self._score_tile_for_crop((col, row), c), reverse=True)
-                chosen = choices[0]
-                if chosen == CROP_SUNFLOWER and self._has_adjacent_sunflower(col, row):
-                    continue
-                self.assign[(col, row)] = chosen
-                self.log.append((col, row, chosen, "assign"))
-                planted += 1
-                print(f"Placed {CROP_NAMES[chosen]} at ({col},{row})")
-
-        for (col, row), crop in list(self.assign.items()):
-            if crop != CROP_NONE:
-                self.log.append((col, row, crop, "final"))
+            print(f"Planted {CROP_NAMES[crop]} at ({col},{row})")
 
         print(f"CSP Complete: Planted {planted} crops (target: {target_planted})")
         return True
@@ -328,167 +316,153 @@ class CSPSolver:
         if requested_counts is not None:
             self.set_requested_counts(requested_counts)
 
-        # Initialize assignments: respect tiles that are hard-blocked (domain == [CROP_NONE])
+        # Initialize assignments
         self.assign = {}
         for var in self.vars:
-            tile = self._tile(var)
-            if tile and len(getattr(tile, "domain", [CROP_NONE])) == 1 and tile.domain[0] == CROP_NONE:
-                self.assign[var] = CROP_NONE
-            else:
-                self.assign[var] = CROP_NONE
+            self.assign[var] = CROP_NONE
 
         self.log = []
 
         if self.mode == "auto":
             return self._solve_auto()
 
+        # Manual mode with requested counts
+        season = self._get_season()
+        is_winter = season == 3
         requested = self.get_requested_counts()
-        total_requested = sum(requested.values())
 
         print(f"Solving CSP for {len(self.vars)} field tiles...")
-        print(
-            "Requested crops: "
-            f"Wheat={requested.get(CROP_WHEAT, 0)}, "
-            f"Sunflower={requested.get(CROP_SUNFLOWER, 0)}, "
-            f"Corn={requested.get(CROP_CORN, 0)}, "
-            f"Tomato={requested.get(CROP_TOMATO, 0)}, "
-            f"Carrot={requested.get(CROP_CARROT, 0)}, "
-            f"Potato={requested.get(CROP_POTATO, 0)}"
-        )
+        print(f"Requested crops: {requested}")
 
-        edge_tiles = [v for v in self.vars if self._is_edge(v[0], v[1])]
-        inner_tiles = [v for v in self.vars if not self._is_edge(v[0], v[1])]
+        if is_winter:
+            # WINTER: Only plant Corn and Carrot
+            print("❄️ WINTER MODE - Planting Corn and Carrot!")
 
-        random.shuffle(edge_tiles)
-        random.shuffle(inner_tiles)
+            corn_target = requested.get(CROP_CORN, 1)
+            carrot_target = requested.get(CROP_CARROT, 1)
 
-        # Partition based on near water and filter out hard-blocked tiles immediately
-        near_water_edge = [v for v in edge_tiles if self._near_water(v[0], v[1]) and self._is_available(v)]
-        dry_edge = [v for v in edge_tiles if v not in near_water_edge and self._is_available(v)]
-        near_water_inner = [v for v in inner_tiles if self._near_water(v[0], v[1]) and self._is_available(v)]
-        dry_inner = [v for v in inner_tiles if v not in near_water_inner and self._is_available(v)]
+            # Make sure we have at least one crop to plant
+            if corn_target == 0 and carrot_target == 0:
+                corn_target = 1
+                carrot_target = 1
+                print("No crops requested for winter, defaulting to 1 Corn + 1 Carrot")
 
-        # SUNFLOWER placement (preferred near water and edge) - domain aware
-        sunflower_target = requested.get(CROP_SUNFLOWER, 0)
-        sunflower_placed = 0
+            # Get all available field tiles
+            field_tiles = [(c, r) for c, r in self.vars]
+            random.shuffle(field_tiles)
 
-        sunflower_placed += self._assign_crop(
-            near_water_edge, CROP_SUNFLOWER, sunflower_target - sunflower_placed
-        )
-        if sunflower_placed < sunflower_target:
-            sunflower_placed += self._assign_crop(
-                dry_edge, CROP_SUNFLOWER, sunflower_target - sunflower_placed
+            corn_planted = 0
+            carrot_planted = 0
+
+            # Plant Corn first
+            for col, row in field_tiles:
+                if corn_planted >= corn_target:
+                    break
+                self.assign[(col, row)] = CROP_CORN
+                self.log.append((col, row, CROP_CORN, "assign"))
+                corn_planted += 1
+                print(f"Planted Corn at ({col},{row}) - {corn_planted}/{corn_target}")
+
+            # Plant Carrot on remaining tiles
+            for col, row in field_tiles:
+                if carrot_planted >= carrot_target:
+                    break
+                if self.assign.get((col, row), CROP_NONE) == CROP_NONE:
+                    self.assign[(col, row)] = CROP_CARROT
+                    self.log.append((col, row, CROP_CARROT, "assign"))
+                    carrot_planted += 1
+                    print(
+                        f"Planted Carrot at ({col},{row}) - {carrot_planted}/{carrot_target}"
+                    )
+
+            total_planted = corn_planted + carrot_planted
+            print(
+                f"CSP Complete: Planted {total_planted} winter crops (Corn: {corn_planted}, Carrot: {carrot_planted})"
             )
-        if sunflower_placed < sunflower_target:
-            sunflower_placed += self._assign_crop(
-                near_water_inner, CROP_SUNFLOWER, sunflower_target - sunflower_placed
-            )
-        if sunflower_placed < sunflower_target:
-            sunflower_placed += self._assign_crop(
-                dry_inner, CROP_SUNFLOWER, sunflower_target - sunflower_placed
-            )
-        if sunflower_placed < sunflower_target:
-            remaining = [v for v in self.vars if self._is_available(v)]
-            random.shuffle(remaining)
-            sunflower_placed += self._assign_crop_relaxed(
-                remaining,
+
+            # Force apply to grid immediately
+            self.apply_to_grid()
+
+            return total_planted > 0
+
+        else:
+            # NORMAL SEASONS - All crops allowed
+            print("🌱 NORMAL SEASON - Planting all crop types")
+
+            target_planted = sum(requested.values())
+            if target_planted == 0:
+                target_planted = max(1, int(len(self.vars) * 0.5))
+
+            planted = 0
+
+            # Plant requested crops
+            for crop_type in [
                 CROP_SUNFLOWER,
-                sunflower_target - sunflower_placed,
-            )
+                CROP_CORN,
+                CROP_WHEAT,
+                CROP_TOMATO,
+                CROP_CARROT,
+            ]:
+                target = requested.get(crop_type, 0)
+                if target > 0:
+                    field_tiles = [
+                        (c, r)
+                        for c, r in self.vars
+                        if self.assign.get((c, r), CROP_NONE) == CROP_NONE
+                    ]
+                    random.shuffle(field_tiles)
+                    for col, row in field_tiles[:target]:
+                        self.assign[(col, row)] = crop_type
+                        self.log.append((col, row, crop_type, "assign"))
+                        planted += 1
+                        print(f"Planted {CROP_NAMES[crop_type]} at ({col},{row})")
 
-        # CORN placement - prefer near water but only where tile domain allows corn
-        corn_target = requested.get(CROP_CORN, 0)
-        corn_candidates = [v for v in (near_water_inner + near_water_edge + dry_inner + dry_edge) if self._is_available(v) and self._tile_allows(v, CROP_CORN)]
-        corn_placed = self._assign_crop(
-            corn_candidates[: corn_target * 3], CROP_CORN, corn_target
-        )
+            # Fill remaining with random crops if needed
+            if planted < target_planted:
+                field_tiles = [
+                    (c, r)
+                    for c, r in self.vars
+                    if self.assign.get((c, r), CROP_NONE) == CROP_NONE
+                ]
+                random.shuffle(field_tiles)
+                crop_types = [CROP_WHEAT, CROP_CORN, CROP_TOMATO, CROP_CARROT]
+                for col, row in field_tiles:
+                    if planted >= target_planted:
+                        break
+                    crop = random.choice(crop_types)
+                    self.assign[(col, row)] = crop
+                    self.log.append((col, row, crop, "assign"))
+                    planted += 1
+                    print(f"Planted {CROP_NAMES[crop]} at ({col},{row})")
 
-        # WHEAT placement
-        wheat_target = requested.get(CROP_WHEAT, 0)
-        wheat_candidates = [v for v in edge_tiles + inner_tiles if self._is_available(v) and self._tile_allows(v, CROP_WHEAT)]
-        random.shuffle(wheat_candidates)
-        wheat_placed = self._assign_crop(
-            wheat_candidates[: wheat_target * 3], CROP_WHEAT, wheat_target
-        )
+            print(f"CSP Complete: Planted {planted} crops")
 
-        # TOMATO placement (prefer near water)
-        tomato_target = requested.get(CROP_TOMATO, 0)
-        tomato_candidates = [v for v in (near_water_edge + near_water_inner + dry_edge + dry_inner) if self._is_available(v) and self._tile_allows(v, CROP_TOMATO)]
-        tomato_placed = self._assign_crop(
-            tomato_candidates[: tomato_target * 3], CROP_TOMATO, tomato_target
-        )
+            # Force apply to grid immediately
+            self.apply_to_grid()
 
-        # CARROT placement (versatile)
-        carrot_target = requested.get(CROP_CARROT, 0)
-        carrot_candidates = [v for v in edge_tiles + inner_tiles if self._is_available(v) and self._tile_allows(v, CROP_CARROT)]
-        random.shuffle(carrot_candidates)
-        carrot_placed = self._assign_crop(
-            carrot_candidates[: carrot_target * 3], CROP_CARROT, carrot_target
-        )
-
-        # POTATO placement (prefer dry areas)
-        potato_target = requested.get(CROP_POTATO, 0)
-        potato_candidates = [v for v in (dry_inner + dry_edge + near_water_inner + near_water_edge) if self._is_available(v) and self._tile_allows(v, CROP_POTATO)]
-        potato_placed = self._assign_crop(
-            potato_candidates[: potato_target * 3], CROP_POTATO, potato_target
-        )
-
-        # Fallbacks to fill requested counts from remaining allowed tiles
-        def _fill_remaining(crop, placed, target):
-            if placed >= target:
-                return placed
-            remaining = [v for v in self.vars if self._is_available(v) and self._tile_allows(v, crop)]
-            random.shuffle(remaining)
-            return placed + self._assign_crop(remaining[: (target - placed) * 3], crop, target - placed)
-
-        corn_placed = _fill_remaining(CROP_CORN, corn_placed, corn_target)
-        wheat_placed = _fill_remaining(CROP_WHEAT, wheat_placed, wheat_target)
-        tomato_placed = _fill_remaining(CROP_TOMATO, tomato_placed, tomato_target)
-        carrot_placed = _fill_remaining(CROP_CARROT, carrot_placed, carrot_target)
-        potato_placed = _fill_remaining(CROP_POTATO, potato_placed, potato_target)
-
-        placed_counts = {
-            CROP_WHEAT: 0,
-            CROP_SUNFLOWER: 0,
-            CROP_CORN: 0,
-            CROP_TOMATO: 0,
-            CROP_CARROT: 0,
-            CROP_POTATO: 0,
-        }
-        for crop in self.assign.values():
-            if crop in placed_counts:
-                placed_counts[crop] += 1
-
-        for (col, row), crop in list(self.assign.items()):
-            if crop != CROP_NONE:
-                self.log.append((col, row, crop, "final"))
-
-        planted = sum(placed_counts.values())
-        print(f"CSP Complete: Planted {planted}/{total_requested} requested crops")
-        return planted == total_requested
+            return True
 
     # ------------------------------
     # Apply assignment to the grid
     # ------------------------------
     def apply_to_grid(self):
-        """Write the solved assignment back to the grid tiles. Respect per-tile domains."""
+        """Write the solved assignment back to the grid tiles."""
         # Clear all crops first
         for col in range(self.grid.cols):
             for row in range(self.grid.rows):
                 self.grid.tiles[col][row].crop = CROP_NONE
                 self.grid.tiles[col][row].crop_stage = 0
 
+        placed_count = 0
         for (col, row), crop in self.assign.items():
             if 0 <= col < self.grid.cols and 0 <= row < self.grid.rows:
-                tile = self.grid.tiles[col][row]
-                # Only apply crops allowed by the current tile domain
-                if crop != CROP_NONE and (crop in getattr(tile, "domain", [CROP_NONE])):
-                    tile.crop = crop
-                    tile.crop_stage = random.randint(1, 2)
-                else:
-                    # Ensure blocked tiles remain NONE
-                    tile.crop = CROP_NONE
-                    tile.crop_stage = 0
+                if crop != CROP_NONE:
+                    self.grid.tiles[col][row].crop = crop
+                    self.grid.tiles[col][row].crop_stage = 2  # Start at stage 2
+                    placed_count += 1
+                    print(f"✅ Placed {CROP_NAMES.get(crop, crop)} at ({col},{row})")
+
+        print(f"✅ Applied {placed_count} crops to grid")
 
     def set_mode(self, mode):
         if mode not in ("auto", "manual"):
@@ -499,5 +473,4 @@ class CSPSolver:
         return self.mode
 
     def available_field_count(self):
-        """Return the number of available field tiles."""
-        return len(self.vars) if hasattr(self, 'vars') else 0
+        return len(self.vars) if hasattr(self, "vars") else 0
