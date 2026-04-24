@@ -61,11 +61,9 @@ class SeasonManager:
 
     def trigger_rain(self, grid):
         """Trigger rain manually (called from rain button)"""
-        print("🌧 RAIN TRIGGERED - Applying to grid!")
         self.rain_active = True
         self.rain_timer = 10 * FPS
         grid.apply_rain(self.index)
-        print(f"🌧 Grid apply_rain() called for season index: {self.index}")
 
     def advance_manual(self, grid):
         """Manually force the next season while preserving runtime flow."""

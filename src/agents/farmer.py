@@ -434,15 +434,20 @@ class Farmer(Agent):
         tile.managed_growth = True
         self._growth_timers[(c, r)] = 0
         self.plant_count += 1
+        print(f"Farmer planted {CROP_NAMES.get(crop, crop)} at ({c}, {r})")
 
     def _harvest(self, grid):
         """Harvest a ripe crop on the farmer's current tile."""
         tile = grid.get(self.col, self.row)
         if tile and tile.crop != CROP_NONE and tile.crop_stage >= 2:
+            crop_name = CROP_NAMES.get(tile.crop, tile.crop)
             value = CROP_VALUE[tile.crop] * tile.crop_stage
             self.score += value
             self.harvest_count += 1
             self.harvested_count += 1
+            print(
+                f"Farmer harvested {crop_name} at ({self.col}, {self.row}) for {value} points"
+            )
 
             tile.crop = CROP_NONE
             tile.crop_stage = 0

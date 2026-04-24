@@ -99,103 +99,6 @@ class CSPSolver:
             CROP_CARROT: carrot,
         }
 
-    def _random_auto_counts(self):
-        """Generate a varied crop-count request for auto mode."""
-        total_fields = len(self.vars)
-        if total_fields <= 0:
-            return {
-                CROP_WHEAT: 0,
-                CROP_SUNFLOWER: 0,
-                CROP_CORN: 0,
-                CROP_TOMATO: 0,
-                CROP_CARROT: 0,
-            }
-
-        season = self._get_season()
-        allowed = self._get_allowed_crops_for_season()
-
-        if season == 3:
-            target_total = random.randint(max(1, int(total_fields * 0.5)), total_fields)
-            corn = random.randint(max(1, target_total // 3), max(1, (target_total * 2) // 3))
-            corn = min(corn, target_total)
-            carrot = max(0, target_total - corn)
-            return {
-                CROP_WHEAT: 0,
-                CROP_SUNFLOWER: 0,
-                CROP_CORN: corn,
-                CROP_TOMATO: 0,
-                CROP_CARROT: carrot,
-            }
-
-        target_total = random.randint(
-            max(1, int(total_fields * 0.35)),
-            max(1, int(total_fields * 0.65)),
-        )
-
-        weights = {
-            CROP_WHEAT: random.uniform(0.7, 1.2),
-            CROP_SUNFLOWER: random.uniform(0.4, 0.9),
-            CROP_CORN: random.uniform(0.8, 1.3),
-            CROP_TOMATO: random.uniform(0.5, 1.0),
-            CROP_CARROT: random.uniform(0.5, 1.0),
-        }
-        weights = {crop: weights[crop] for crop in allowed}
-        total_weight = sum(weights.values()) or 1.0
-
-        counts = {
-            CROP_WHEAT: 0,
-            CROP_SUNFLOWER: 0,
-            CROP_CORN: 0,
-            CROP_TOMATO: 0,
-            CROP_CARROT: 0,
-        }
-
-        allocated = 0
-        allowed_list = list(weights.keys())
-        for idx, crop in enumerate(allowed_list):
-            if idx == len(allowed_list) - 1:
-                share = target_total - allocated
-            else:
-                share = int(round(target_total * (weights[crop] / total_weight)))
-                share = max(0, min(share, target_total - allocated))
-            counts[crop] = share
-            allocated += share
-
-        while allocated < target_total:
-            crop = random.choice(allowed_list)
-            counts[crop] += 1
-            allocated += 1
-
-        while allocated > target_total:
-            crop = random.choice([c for c in allowed_list if counts[c] > 0])
-            counts[crop] -= 1
-            allocated -= 1
-
-        return counts
-
-    def _solve_requested_counts(self, requested):
-        """Solve a specific crop-count request using CSP constraints."""
-        self.requested_counts = requested
-        self.assign = {pos: None for pos in self.vars}
-        initial_domains = self._recompute_domains(dict(requested))
-        self.domains = initial_domains
-        solved = self._forward_check(initial_domains, dict(requested)) and self._backtracking_search(
-            initial_domains, dict(requested)
-        )
-
-        if solved:
-            self.last_failure_reason = ""
-            for pos in self.vars:
-                if self.assign.get(pos) is None:
-                    self.assign[pos] = CROP_NONE
-            self.apply_to_grid()
-        else:
-            for pos in self.vars:
-                if self.assign.get(pos) is None:
-                    self.assign[pos] = CROP_NONE
-
-        return solved
-
     def _check_timeout(self):
         """Check if solve operation has exceeded timeout."""
         if self.solve_start_time is None:
@@ -646,23 +549,70 @@ class CSPSolver:
             placed += 1
         return placed
 
-    # Auto solver
+    # Auto solver (heuristic-driven)
 
     def _solve_auto(self):
-        """Auto-solve mode using randomized requests solved by CSP constraints."""
+        """Auto-solve mode - heuristic-driven crop placement."""
         if len(self.grid.crop_tiles()) > 0:
             return False
 
-        attempts = 8
-        for _ in range(attempts):
-            requested = self._random_auto_counts()
-            self.log = []
-            self.backtrack_log = []
-            self.last_failure_reason = ""
-            if self._solve_requested_counts(requested):
-                return True
+        season = self._get_season()
+        is_winter = season == 3
 
-        return False
+        if is_winter:
+            # Plant Corn and Carrot on ALL field tiles in winter
+            field_tiles = list(self.vars)
+            random.shuffle(field_tiles)
+
+            planted = 0
+            for idx, (col, row) in enumerate(field_tiles):
+                crop = CROP_CORN if idx % 2 == 0 else CROP_CARROT
+                self.assign[(col, row)] = crop
+                self.log.append((col, row, crop, "assign"))
+                planted += 1
+
+            return True
+
+        # Normal seasons (Spring, Summer, Autumn) - Plant all crop types
+        target_planted = max(1, int(len(self.vars) * 0.5))
+        planted = 0
+
+        edge_tiles = [v for v in self.vars if self._is_edge(v[0], v[1])]
+        inner_tiles = [v for v in self.vars if not self._is_edge(v[0], v[1])]
+
+        # Plant Sunflowers on edge tiles
+        sf_candidates = [v for v in edge_tiles if self._is_available(v)]
+        sf_candidates.sort(
+            key=lambda p: self._score_tile_for_crop(p, CROP_SUNFLOWER), reverse=True
+        )
+
+        for col, row in sf_candidates:
+            if planted >= target_planted:
+                break
+            if self._has_adjacent_sunflower(col, row):
+                continue
+            if random.random() > 0.35:
+                self.assign[(col, row)] = CROP_SUNFLOWER
+                self.log.append((col, row, CROP_SUNFLOWER, "assign"))
+                planted += 1
+
+        # Fill remaining with random crops
+        all_tiles = [v for v in edge_tiles + inner_tiles if self._is_available(v)]
+        random.shuffle(all_tiles)
+
+        crop_types = [CROP_WHEAT, CROP_CORN, CROP_TOMATO, CROP_CARROT]
+
+        for col, row in all_tiles:
+            if planted >= target_planted:
+                break
+            if self.assign.get((col, row), CROP_NONE) != CROP_NONE:
+                continue
+            crop = random.choice(crop_types)
+            self.assign[(col, row)] = crop
+            self.log.append((col, row, crop, "assign"))
+            planted += 1
+
+        return True
 
 
     def solve(self, requested_counts=None):
@@ -698,7 +648,23 @@ class CSPSolver:
                 if crop not in allowed:
                     requested[crop] = 0
 
-        solved = self._solve_requested_counts(requested)
+        self.requested_counts = requested
+        initial_domains = self._recompute_domains(dict(requested))
+        self.domains = initial_domains
+        solved = self._forward_check(initial_domains, dict(requested)) and self._backtracking_search(
+            initial_domains, dict(requested)
+        )
+
+        if solved:
+            self.last_failure_reason = ""
+            for pos in self.vars:
+                if self.assign.get(pos) is None:
+                    self.assign[pos] = CROP_NONE
+            self.apply_to_grid()
+        else:
+            for pos in self.vars:
+                if self.assign.get(pos) is None:
+                    self.assign[pos] = CROP_NONE
 
         self.solve_start_time = None
         return solved

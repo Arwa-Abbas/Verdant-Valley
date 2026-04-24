@@ -11,6 +11,8 @@ Orchestrates all game systems including:
 """
 
 import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import pygame
 import os
 import random
@@ -839,8 +841,17 @@ class Game:
             and hasattr(self.csp_solver, "solve")
             and hasattr(self.csp_solver, "apply_to_grid")
         ):
+            previous_mode = (
+                self.csp_solver.get_mode()
+                if hasattr(self.csp_solver, "get_mode")
+                else "manual"
+            )
+            if hasattr(self.csp_solver, "set_mode"):
+                self.csp_solver.set_mode("auto")
             self.csp_solver.solve()
             self.csp_solver.apply_to_grid()
+            if hasattr(self.csp_solver, "set_mode"):
+                self.csp_solver.set_mode(previous_mode)
         if self.grid:
             self.farm_ui = FarmUI(self.grid)
         self._complete_generation(

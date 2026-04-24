@@ -48,11 +48,8 @@ class Agent:
                         animation_cols,
                         scale,
                     )
-                    print(f"Loaded animation for {name}")
-                else:
-                    print(f"Sprite sheet not found for {name}: {sprite_sheet_path}")
-            except Exception as e:
-                print(f"Could not load animation for {name}: {e}")
+            except Exception:
+                self.animation = None
 
         # Position (pixel coordinates)
         cx, cy = tile_center(col, row)

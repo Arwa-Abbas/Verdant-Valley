@@ -20,8 +20,6 @@ class SpriteManager:
         self.load_sprite_sheet("bridge", "assets/farm/bridge.png", 64, 32, 3, 1)
         self.load_sprite_sheet("decor", "assets/farm/Outdoor_Decor.png", 32, 32, 4, 4)
 
-        print(f"Loaded {len(self.sprites)} sprites")
-
     def load_single_sprite(self, name, path, size=None):
         """Load a single sprite image"""
         try:
@@ -30,11 +28,8 @@ class SpriteManager:
                 if size:
                     sprite = pygame.transform.scale(sprite, size)
                 self.sprites[name] = sprite
-                print(f"Loaded: {name}")
-            else:
-                print(f"Not found: {path}")
-        except Exception as e:
-            print(f"Error loading {name}: {e}")
+        except Exception:
+            pass
 
     def load_sprite_sheet(self, name, path, sprite_w, sprite_h, cols, rows):
         """Load a sprite sheet and extract all sprites"""
@@ -57,11 +52,8 @@ class SpriteManager:
                             sprites.append(sprite)
 
                 self.sprites[name] = sprites
-                print(f"Loaded sprite sheet: {name} ({len(sprites)} sprites)")
-            else:
-                print(f"Not found: {path}")
-        except Exception as e:
-            print(f"Error loading {name}: {e}")
+        except Exception:
+            pass
 
     def get_sprite(self, name, index=0):
         """Get a sprite by name (index for sprite sheets)"""

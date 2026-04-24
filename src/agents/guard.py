@@ -314,6 +314,9 @@ class Guard(Agent):
                 ):
                     self.chase_target.alive = False
                     self.score = getattr(self, "score", 0) + 1
+                    print(
+                        f"Guard eliminated {self.chase_target.name} at ({self.col}, {self.row})"
+                    )
                     self.state = "patrol"
                     self.chase_target = None
                     return
@@ -334,8 +337,11 @@ class Guard(Agent):
                 )
                 <= 1
             ):
+                target_name = self.chase_target.name
+                target_pos = (self.chase_target.col, self.chase_target.row)
                 self.chase_target.caught()
                 self.score += 50
+                print(f"Guard caught {target_name} near {target_pos} and earned 50 points")
                 self.state = "patrol"
                 self.chase_target = None
                 self._stuck_ticks = 0

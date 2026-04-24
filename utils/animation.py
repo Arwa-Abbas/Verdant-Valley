@@ -15,9 +15,6 @@ class Animation:
         sheet_width = self.sheet.get_width()
         sheet_height = self.sheet.get_height()
 
-        print(f"Sheet: {sheet_width}x{sheet_height}")
-        print(f"Frames: {rows}x{cols}, each {frame_width}x{frame_height}")
-
         self.frames = []
         for row in range(rows):
             row_frames = []
@@ -42,10 +39,6 @@ class Animation:
         self.current_frame = 0
         self.animation_speed = 0.12
         self.animation_timer = 0
-
-        print(
-            f"Loaded {len(self.frames)} rows, {len(self.frames[0]) if self.frames else 0} frames per row"
-        )
 
     def set_direction(self, row):
         if 0 <= row < len(self.frames):

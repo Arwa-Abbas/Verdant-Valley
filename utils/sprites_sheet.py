@@ -7,11 +7,7 @@ class SpriteSheet:
         """Load a sprite sheet"""
         try:
             self.sheet = pygame.image.load(filename).convert_alpha()
-            print(
-                f"Loaded sprite sheet: {filename} ({self.sheet.get_width()}x{self.sheet.get_height()})"
-            )
         except pygame.error:
-            print(f"Could not load {filename}")
             self.sheet = None
 
     def get_sprite(self, x, y, width, height):

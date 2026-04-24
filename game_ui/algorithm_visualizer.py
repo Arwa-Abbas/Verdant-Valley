@@ -12,6 +12,7 @@ class AlgorithmVisualizer:
     """Visualization panel for A* pathfinding and CSP backtracking algorithms"""
 
     def __init__(self, screen, grid):
+        
         self.screen = screen
         self.grid = grid
         self.visible = True
@@ -52,9 +53,6 @@ class AlgorithmVisualizer:
             "animal": (255, 100, 100),
         }
 
-        print(
-            "AlgorithmVisualizer initialized - TAB to toggle panel, N for node overlay"
-        )
 
     # ============================================================
     # DATA UPDATE METHODS
@@ -365,12 +363,10 @@ class AlgorithmVisualizer:
     def toggle(self):
         """Show/hide the visualization panel"""
         self.visible = not self.visible
-        print(f"Visualizer Panel: {'ON' if self.visible else 'OFF'}")
 
     def toggle_node_overlay(self):
         """Show/hide colored node overlay on grid"""
         self.show_node_overlay = not self.show_node_overlay
-        print(f"Node Overlay: {'ON' if self.show_node_overlay else 'OFF'}")
 
     def notify_backtrack(self):
         """Trigger backtrack visual flash"""

@@ -25,7 +25,7 @@ class VisualizationManager:
 
         # Panel dimensions
         self.panel_width = 420
-        self.panel_height = 680
+        self.panel_height = 730
         self.panel_x = SCREEN_W - self.panel_width - 10
         self.panel_y = 10
 
@@ -58,6 +58,8 @@ class VisualizationManager:
         self.csp_flash_timer = 0
         self.csp_flash_pos = None
         self.last_backtrack_count = 0
+        self.total_backtracks = 0
+        self.total_assignments = 0
 
         # Historical view
         self.backtrack_history = deque(maxlen=10)
@@ -81,7 +83,6 @@ class VisualizationManager:
             "rabbit_path": (180, 100, 255),
         }
 
-        print("Visualization Manager initialized - TAB=Panel N=Nodes M=Paths")
 
     # ============================================================
     # DATA UPDATE METHODS
@@ -124,6 +125,9 @@ class VisualizationManager:
 
             # Track assignments
             current_assign = getattr(csp_solver, "assign", {})
+            self.total_assignments = sum(
+                1 for crop in current_assign.values() if crop != CROP_NONE
+            )
             for (col, row), crop in current_assign.items():
                 if crop != CROP_NONE:
                     is_new = True
@@ -138,6 +142,7 @@ class VisualizationManager:
 
             # Track backtracks
             backtrack_log = getattr(csp_solver, "backtrack_log", [])
+            self.total_backtracks = len(backtrack_log)
             if len(backtrack_log) > self.last_backtrack_count:
                 for entry in backtrack_log[self.last_backtrack_count :]:
                     if isinstance(entry, tuple) and len(entry) >= 2:
@@ -314,45 +319,27 @@ class VisualizationManager:
 
     def _draw_astar_section(self, x, y, col_w):
         """Draw A* node expansion statistics section"""
-        section_h = 145
+        section_h = 130
         pygame.draw.rect(self.screen, (35, 45, 55), (x, y, col_w, section_h))
         pygame.draw.rect(self.screen, (80, 150, 80), (x, y, col_w, section_h), 1)
 
         header = self.font.render("A* SEARCH NODE EXPANSION", True, (255, 215, 0))
         self.screen.blit(header, (x + 8, y + 5))
+        pygame.draw.line(
+            self.screen, (80, 150, 80), (x + 8, y + 23), (x + col_w - 8, y + 23), 1
+        )
 
-        self._draw_agent_row(
-            x,
-            y + 28,
-            "FARMER:",
-            self.agent_colors["farmer"],
-            self.farmer_expanded,
-            self.farmer_cost,
-        )
-        self._draw_agent_row(
-            x,
-            y + 48,
-            "GUARD:",
-            self.agent_colors["guard"],
-            self.guard_expanded,
-            self.guard_cost,
-        )
-        self._draw_agent_row(
-            x,
-            y + 68,
-            "FOX:",
-            self.agent_colors["fox"],
-            self.fox_expanded,
-            self.fox_cost,
-        )
-        self._draw_agent_row(
-            x,
-            y + 88,
-            "RABBIT:",
-            self.agent_colors["rabbit"],
-            self.rabbit_expanded,
-            self.rabbit_cost,
-        )
+        agents = [
+            ("FARMER:", self.agent_colors["farmer"], self.farmer_expanded, self.farmer_cost),
+            ("GUARD:", self.agent_colors["guard"], self.guard_expanded, self.guard_cost),
+            ("FOX:", self.agent_colors["fox"], self.fox_expanded, self.fox_cost),
+            ("RABBIT:", self.agent_colors["rabbit"], self.rabbit_expanded, self.rabbit_cost),
+        ]
+        for i, (name, color, nodes, cost) in enumerate(agents):
+            row_y = y + 27 + i * 23
+            if i % 2 == 0:
+                pygame.draw.rect(self.screen, (40, 52, 62), (x + 2, row_y - 2, col_w - 4, 20))
+            self._draw_agent_row(x, row_y, name, color, nodes, cost)
 
         return y + section_h + 8
 
@@ -367,13 +354,13 @@ class VisualizationManager:
 
         self.screen.blit(
             self.font.render(
-                f"Backtracks: {len(self.backtrack_history)}", True, (255, 180, 180)
+                f"Backtracks: {self.total_backtracks}", True, (255, 180, 180)
             ),
             (x + 8, y + 28),
         )
         self.screen.blit(
             self.font.render(
-                f"Assignments: {len(self.assignment_history)}", True, (180, 255, 180)
+                f"Assignments: {self.total_assignments}", True, (180, 255, 180)
             ),
             (x + 200, y + 28),
         )
@@ -396,51 +383,73 @@ class VisualizationManager:
         return y + section_h + 8
 
     def _draw_history_section(self, x, y, col_w):
-        """Draw backtrack and assignment history section"""
-        section_h = 150
+        """Draw backtrack and assignment history section - two columns, all entries visible"""
+        max_entries = max(len(self.backtrack_history), len(self.assignment_history))
+        entries_shown = min(max_entries, 15)
+        section_h = max(120, 30 + 22 + entries_shown * 15 + 10)
         pygame.draw.rect(self.screen, (35, 45, 55), (x, y, col_w, section_h))
         pygame.draw.rect(self.screen, (80, 150, 80), (x, y, col_w, section_h), 1)
 
         header = self.font.render("HISTORICAL VIEW", True, (255, 215, 0))
         self.screen.blit(header, (x + 8, y + 5))
 
-        # Backtrack history
-        title = self.font.render("Recent Backtracks:", True, (255, 215, 0))
-        self.screen.blit(title, (x + 8, y + 28))
+        # Divider below header
+        pygame.draw.line(
+            self.screen, (80, 150, 80), (x + 8, y + 25), (x + col_w - 8, y + 25), 1
+        )
 
-        hist_y = y + 50
-        for i, (col, row, step, timestamp) in enumerate(self.backtrack_history):
-            if i > 4:
+        # Two-column layout: left = backtracks, right = assignments
+        half_w = (col_w - 4) // 2
+
+        # --- Left column: Backtracks ---
+        bt_x = x + 8
+        col_header = self.font_small.render("Recent Backtracks:", True, (255, 180, 100))
+        self.screen.blit(col_header, (bt_x, y + 29))
+
+        bt_y = y + 43
+        backtrack_list = list(self.backtrack_history)
+        for i, (col, row, step, timestamp) in enumerate(reversed(backtrack_list)):
+            if bt_y + 13 > y + section_h - 4:
                 break
             time_ago = time.time() - timestamp
             if time_ago < 1:
-                time_str = "just now"
+                time_str = "now"
             elif time_ago < 60:
-                time_str = f"{int(time_ago)}s ago"
+                time_str = f"{int(time_ago)}s"
             else:
-                time_str = f"{int(time_ago/60)}m ago"
-
+                time_str = f"{int(time_ago/60)}m"
+            fade = max(130, 220 - i * 10)
+            color = (255, fade // 2 + 50, fade // 2 + 50)
             text = self.font_small.render(
-                f"({col},{row}) step {step} ({time_str})", True, (255, 150, 150)
+                f"({col},{row}) s{step} {time_str}", True, color
             )
-            self.screen.blit(text, (x + 15, hist_y))
-            hist_y += 16
+            self.screen.blit(text, (bt_x + 4, bt_y))
+            bt_y += 15
 
-        # Assignment history
-        hist_y += 8
-        title = self.font.render("Recent Assignments:", True, (100, 200, 100))
-        self.screen.blit(title, (x + 8, hist_y))
-        hist_y += 20
+        # Vertical divider
+        div_x = x + half_w + 2
+        pygame.draw.line(
+            self.screen, (80, 120, 80), (div_x, y + 26), (div_x, y + section_h - 4), 1
+        )
 
-        for i, (col, row, crop, step, timestamp) in enumerate(self.assignment_history):
-            if i > 4:
+        # --- Right column: Assignments ---
+        asgn_x = x + half_w + 10
+        col_header2 = self.font_small.render("Recent Assignments:", True, (120, 220, 120))
+        self.screen.blit(col_header2, (asgn_x, y + 29))
+
+        asgn_y = y + 43
+        assign_list = list(self.assignment_history)
+        for i, (col, row, crop, step, timestamp) in enumerate(reversed(assign_list)):
+            if asgn_y + 13 > y + section_h - 4:
                 break
-            crop_name = CROP_NAMES.get(crop, "Unknown")[:8]
+            crop_name = CROP_NAMES.get(crop, "?")[:7]
+            fade = max(130, 220 - i * 8)
+            color = (fade // 2 + 50, fade, fade // 2 + 50)
             text = self.font_small.render(
-                f"({col},{row}): {crop_name} step {step}", True, (150, 200, 150)
+                f"({col},{row}): {crop_name}", True, color
             )
-            self.screen.blit(text, (x + 15, hist_y))
-            hist_y += 16
+            self.screen.blit(text, (asgn_x + 4, asgn_y))
+            asgn_y += 15
 
         return y + section_h + 8
 
@@ -521,6 +530,13 @@ class VisualizationManager:
 
         self.frame_counter += 1
 
+        # Panel height: fixed sections + dynamic history
+        max_hist = max(len(self.backtrack_history), len(self.assignment_history))
+        hist_shown = min(max_hist, 15)
+        hist_h = max(120, 30 + 22 + hist_shown * 15 + 10)
+        # astar(138) + csp(148) + hist(dynamic) + metrics(88) + title(40) + controls(18) + gaps
+        self.panel_height = 40 + 138 + 148 + hist_h + 88 + 18 + 10
+
         # Panel background
         panel_rect = pygame.Rect(
             self.panel_x, self.panel_y, self.panel_width, self.panel_height
@@ -548,7 +564,11 @@ class VisualizationManager:
         y = self._draw_metrics_section(
             x, y, col_w, farmer_score, guard_score, fox_score, rabbit_score, fps
         )
-        self._draw_legend_section(x, y, col_w)
+        # Compact controls hint at the bottom of the panel
+        controls = self.font_small.render(
+            "TAB: Toggle Panel  |  N: Nodes  |  M: Paths", True, (140, 140, 140)
+        )
+        self.screen.blit(controls, (x + 8, y))
 
     def draw_all(
         self,
@@ -574,15 +594,12 @@ class VisualizationManager:
 
     def toggle_panel(self):
         self.show_panel = not self.show_panel
-        print(f"Visualizer Panel: {'ON' if self.show_panel else 'OFF'}")
 
     def toggle_nodes(self):
         self.show_node_overlay = not self.show_node_overlay
-        print(f"Node Overlay: {'ON' if self.show_node_overlay else 'OFF'}")
 
     def toggle_paths(self):
         self.show_paths = not self.show_paths
-        print(f"Path Overlay: {'ON' if self.show_paths else 'OFF'}")
 
     def record_backtrack(self, col, row, constraint=""):
         self.backtrack_history.append((col, row, self.csp_step, time.time()))

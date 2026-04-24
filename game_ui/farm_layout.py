@@ -20,7 +20,6 @@ class FarmUI:
         try:
             img = pygame.image.load("assets/farm/house.png").convert_alpha()
             self.sprites["house"] = pygame.transform.scale(img, (300, 330))
-            print("House loaded")
         except:
             pass
 
@@ -28,7 +27,6 @@ class FarmUI:
         try:
             img = pygame.image.load("assets/tiles/Path_Tile.png").convert_alpha()
             self.sprites["path"] = pygame.transform.scale(img, (220, 220))
-            print("Path tile loaded")
         except:
             pass
 
@@ -36,7 +34,6 @@ class FarmUI:
         try:
             img = pygame.image.load("assets/tiles/Cliff_Tile.png").convert_alpha()
             self.sprites["cliff"] = pygame.transform.scale(img, (250, 200))
-            print("Cliff tile loaded")
         except:
             pass
 
@@ -44,7 +41,6 @@ class FarmUI:
         try:
             img = pygame.image.load("assets/farm/Oak_Tree.png").convert_alpha()
             self.sprites["big_tree"] = pygame.transform.scale(img, (100, 120))
-            print("Big tree loaded")
         except:
             pass
 
@@ -52,7 +48,6 @@ class FarmUI:
         try:
             img = pygame.image.load("assets/farm/Oak_Tree_Small.png").convert_alpha()
             self.sprites["small_tree"] = pygame.transform.scale(img, (140, 140))
-            print("Small tree loaded")
         except:
             pass
 
@@ -60,7 +55,6 @@ class FarmUI:
         try:
             img = pygame.image.load("assets/farm/Oak_Tree.png").convert_alpha()
             self.sprites["house_tree"] = pygame.transform.scale(img, (90, 110))
-            print("House trees loaded")
         except:
             if "small_tree" in self.sprites:
                 self.sprites["house_tree"] = pygame.transform.scale(
@@ -78,9 +72,7 @@ class FarmUI:
                 piece.blit(sheet, (0, 0), (i * 70, 0, 64, 32))
                 piece = pygame.transform.scale(piece, (100, 50))
                 self.sprites["bridge"].append(piece)
-            print(f"Bridge loaded: {len(self.sprites['bridge'])} pieces")
         except:
-            print("Bridge not found")
             pass
 
         # FENCE
@@ -92,7 +84,6 @@ class FarmUI:
                 piece.blit(sheet, (0, 0), (i * 48, 0, 48, 48))
                 piece = pygame.transform.scale(piece, (64, 64))
                 self.sprites["fence"].append(piece)
-            print(f"Fence loaded: {len(self.sprites['fence'])} pieces")
         except:
             pass
 
@@ -100,7 +91,6 @@ class FarmUI:
         try:
             img = pygame.image.load("assets/farm/farm_animals/Cow.png").convert_alpha()
             self.sprites["cow"] = pygame.transform.scale(img, (120, 120))
-            print("Cow loaded")
         except:
             pass
 
@@ -109,7 +99,6 @@ class FarmUI:
                 "assets/farm/farm_animals/Sheep.png"
             ).convert_alpha()
             self.sprites["sheep"] = pygame.transform.scale(img, (110, 110))
-            print("Sheep loaded")
         except:
             pass
 
@@ -118,7 +107,6 @@ class FarmUI:
                 "assets/farm/farm_animals/Chicken.png"
             ).convert_alpha()
             self.sprites["chicken"] = pygame.transform.scale(img, (90, 90))
-            print("Chicken loaded")
         except:
             pass
 

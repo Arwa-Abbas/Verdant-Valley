@@ -63,13 +63,14 @@ class CSPPopup:
             CROP_WHEAT: requested.get(CROP_WHEAT, 0),
             CROP_SUNFLOWER: requested.get(CROP_SUNFLOWER, 0),
             CROP_CORN: requested.get(CROP_CORN, 0),
-            CROP_TOMATO: 0,
-            CROP_CARROT: 0,
+            CROP_TOMATO: requested.get(CROP_TOMATO, 0),
+            CROP_CARROT: requested.get(CROP_CARROT, 0),
         }
         self.mode = self.csp_solver.get_mode()
         self.crop_controls = {}
         self.mode_buttons = {}
         self.message = ""
+        self.last_generation_adjusted = False
         self._build_layout_controls()
 
     # ============================================================
@@ -148,16 +149,101 @@ class CSPPopup:
         self.mode = mode
         self._sync_solver_counts()
 
-    def regenerate_everything(self):
-        """Regenerate entire farm layout using CSP"""
-        print("Regenerating farm layout...")
+    def _current_assignment_count(self):
+        """Return the number of currently assigned non-empty crops."""
+        return sum(
+            1
+            for crop in getattr(self.csp_solver, "assign", {}).values()
+            if crop != CROP_NONE
+        )
+
+    def _current_assignment_breakdown(self):
+        """Return the assigned crop counts from the current solver state."""
+        counts = {
+            CROP_WHEAT: 0,
+            CROP_SUNFLOWER: 0,
+            CROP_CORN: 0,
+            CROP_TOMATO: 0,
+            CROP_CARROT: 0,
+        }
+        for crop in getattr(self.csp_solver, "assign", {}).values():
+            if crop in counts:
+                counts[crop] += 1
+        return counts
+
+    def _try_generate_with_counts(self, counts):
+        """Try generating a layout with the provided counts."""
         self.grid._build_map()
         self.grid._bake_all()
         self.csp_solver.refresh_grid_context()
-        self._sync_solver_counts()
-        self.csp_solver.solve(self.crop_counts)
-        self.csp_solver.apply_to_grid()
-        print("New layout generated.")
+        self.csp_solver.set_mode(self.mode)
+        self.csp_solver.set_requested_counts(counts)
+
+        solved = self.csp_solver.solve(counts)
+        assigned_count = self._current_assignment_count()
+        return solved and assigned_count > 0
+
+    def _reduce_to_feasible_counts(self, counts):
+        """Reduce an invalid manual crop mix until a valid layout is found."""
+        trial_counts = dict(counts)
+        original_total = sum(trial_counts.values())
+
+        while sum(trial_counts.values()) > 0:
+            if self._try_generate_with_counts(trial_counts):
+                placed_counts = self._current_assignment_breakdown()
+                placed_total = sum(placed_counts.values())
+                self.csp_solver.apply_to_grid()
+                self.crop_counts = placed_counts
+                self.message = (
+                    f"Invalid combo detected. Requested {original_total} crops, so only {placed_total} valid assignments were generated automatically."
+                )
+                self.last_generation_adjusted = True
+                return True
+
+            reducible = [crop for crop, value in trial_counts.items() if value > 0]
+            if not reducible:
+                break
+
+            crop_to_reduce = max(
+                reducible,
+                key=lambda crop: (trial_counts[crop], self.crop_counts.get(crop, 0)),
+            )
+            trial_counts[crop_to_reduce] -= 1
+
+        return False
+
+    def regenerate_everything(self):
+        """Regenerate entire farm layout using CSP, refusing zero-assignment results."""
+        self.last_generation_adjusted = False
+
+        attempts = 6 if self.mode == "auto" else 1
+        last_reason = "No valid crop layout could be generated."
+
+        for _ in range(attempts):
+            self._sync_solver_counts()
+            if self._try_generate_with_counts(self.crop_counts):
+                assigned_count = self._current_assignment_count()
+                self.csp_solver.apply_to_grid()
+
+                if self.mode == "auto":
+                    self.crop_counts = self._current_assignment_breakdown()
+
+                self.message = ""
+                return "success"
+
+            last_reason = (
+                getattr(self.csp_solver, "last_failure_reason", "") or last_reason
+            )
+
+        if self.mode == "manual" and self._reduce_to_feasible_counts(self.crop_counts):
+            return "adjusted"
+
+        self.message = (
+            f"No valid assignment found. {last_reason} Adjust crop counts and try again."
+            if self.mode == "manual"
+            else "Auto mode could not find a valid crop layout. Please regenerate again."
+        )
+        return False
 
     # ============================================================
     # DRAWING HELPERS
@@ -626,9 +712,14 @@ class CSPPopup:
 
             # Confirm button
             if self.confirm_button.collidepoint(pos):
-                self.regenerate_everything()
-                self.visible = False
-                self.confirmed = True
+                result = self.regenerate_everything()
+                if result == "success":
+                    self.visible = False
+                    self.confirmed = True
+                elif result == "adjusted":
+                    # Keep popup open so the user can read the adjustment message,
+                    # then allow a second confirm click to proceed.
+                    return True
                 return True
 
             # Regenerate button

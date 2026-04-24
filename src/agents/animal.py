@@ -48,7 +48,6 @@ class Animal(Agent):
             frame_w = w // animation_cols
             frame_h = h // animation_rows
             sprite_path = path
-            print(f"{name} sprite sheet loaded: {w}x{h}")
 
         super().__init__(
             col,
@@ -254,7 +253,7 @@ class Animal(Agent):
         self.state = "caught"
         self.moving = False
         self.path = []
-        print(f"{self.name} was caught")
+        print(f"Guard caught {self.name} at ({self.col}, {self.row})")
 
     def _is_valid_step(self, tile, rain_active=False):
         """Check if tile is walkable"""
@@ -449,27 +448,38 @@ class Animal(Agent):
                 if self.animal_type == "rabbit":
                     # Rabbit nibbles - reduces stage by 1
                     if tile.crop_stage > 0:
+                        original_crop = tile.crop
+                        crop_name = CROP_NAMES.get(original_crop, original_crop)
                         tile.crop_stage -= 1
                         self.crops_eaten += 1
                         self.crops_eaten_this_season += 1
                         self.lifetime_crops += 1
                         self.recent_crop_damage_timer = 8 * FPS
-                        self.score += CROP_VALUE[tile.crop]
+                        self.score += CROP_VALUE[original_crop]
                         self._ate_this_tile = True
+                        print(
+                            f"Rabbit ate {crop_name} at ({self.col}, {self.row}); stage is now {tile.crop_stage}"
+                        )
                         if tile.crop_stage <= 0:
                             tile.crop = CROP_NONE
                             tile.crop_stage = 0
                         return True
                 else:
                     # Fox destroys crop
+                    original_crop = tile.crop
+                    original_stage = tile.crop_stage
+                    crop_name = CROP_NAMES.get(original_crop, original_crop)
                     self.crops_eaten += 1
                     self.crops_eaten_this_season += 1
                     self.lifetime_crops += 1
                     self.recent_crop_damage_timer = 8 * FPS
-                    self.score += CROP_VALUE[tile.crop] * max(1, tile.crop_stage)
+                    self.score += CROP_VALUE[original_crop] * max(1, original_stage)
                     tile.crop = CROP_NONE
                     tile.crop_stage = 0
                     self._ate_this_tile = True
+                    print(
+                        f"Fox destroyed {crop_name} at ({self.col}, {self.row}) from stage {original_stage}"
+                    )
                     return True
         else:
             self._ate_this_tile = False
@@ -503,14 +513,10 @@ class Animal(Agent):
             dist = manhattan((self.col, self.row), (guard.col, guard.row))
             flee_dist = self.FLEE_DISTANCE * self.chromosome.get("boldness", 1.0)
             if dist <= flee_dist:
-                if self.state != "scared":
-                    print(f"{self.name} is scared")
                 self.state = "scared"
                 self.stamina = max(0, self.stamina - self.STAMINA_DRAIN)
                 self.speed = 1.0 if self.stamina == 0 else 2.2
             else:
-                if self.state == "scared":
-                    print(f"{self.name} calmed down")
                 self.state = "hungry"
                 self.stamina = min(self.STAMINA_MAX, self.stamina + 1)
                 self.speed = self.chromosome.get(
