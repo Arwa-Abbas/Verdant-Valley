@@ -314,7 +314,7 @@ class YearEndScreen:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _draw_scores_panel(self):
-        panel = pygame.Rect(30, 124, 310, 310)
+        panel = pygame.Rect(30, 124, 310, 370)
         _draw_rounded_rect_gradient(self.screen, panel, self.C["panel_top"], self.C["panel_bot"], 14)
         pygame.draw.rect(self.screen, self.C["border"], panel, 2, border_radius=14)
 
@@ -368,7 +368,7 @@ class YearEndScreen:
             ("Guard",  self.guard_score,  self.C["guard"]),
             ("Animal", self.animal_score, self.C["animal"]),
         ]):
-            by = bar_y0 + i * 26
+            by = bar_y0 + i * 30
             bg_r = pygame.Rect(bar_x, by, bar_w, bar_h)
             pygame.draw.rect(self.screen, (25, 40, 30), bg_r, border_radius=6)
             fill = int(bar_w * min(score / 500, 1))
@@ -394,7 +394,7 @@ class YearEndScreen:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _draw_evolution_panel(self):
-        panel = pygame.Rect(354, 124, SCREEN_W - 384, 310)
+        panel = pygame.Rect(354, 124, SCREEN_W - 384, 370)
         _draw_rounded_rect_gradient(self.screen, panel, self.C["panel_top"], self.C["panel_bot"], 14)
         pygame.draw.rect(self.screen, self.C["border"], panel, 2, border_radius=14)
 
@@ -408,7 +408,7 @@ class YearEndScreen:
         half_w = (panel.w - 36) // 2
 
         # ── Fox section ───────────────────────────────────────────────────────
-        fox_panel = pygame.Rect(panel.x + 12, panel.y + 42, half_w, 260)
+        fox_panel = pygame.Rect(panel.x + 12, panel.y + 42, half_w, 310)
         pygame.draw.rect(self.screen, (18, 30, 22), fox_panel, border_radius=10)
         pygame.draw.rect(self.screen, self.C["fox"], fox_panel, 1, border_radius=10)
 
@@ -420,7 +420,7 @@ class YearEndScreen:
             self.fox_before, self.fox_after, self.C["fox"]
         )
         self._draw_chromosome_section(
-            fox_panel.x + 10, fox_panel.y + 110,
+            fox_panel.x + 10, fox_panel.y + 140,
             fox_panel.w - 20,
             self.fox_chromo_after,
             self.C["fox"],
@@ -428,7 +428,7 @@ class YearEndScreen:
         )
 
         # ── Rabbit section ────────────────────────────────────────────────────
-        rab_panel = pygame.Rect(panel.x + 24 + half_w, panel.y + 42, half_w, 260)
+        rab_panel = pygame.Rect(panel.x + 24 + half_w, panel.y + 42, half_w, 310)
         pygame.draw.rect(self.screen, (18, 30, 22), rab_panel, border_radius=10)
         pygame.draw.rect(self.screen, self.C["rabbit"], rab_panel, 1, border_radius=10)
 
@@ -440,7 +440,7 @@ class YearEndScreen:
             self.rabbit_before, self.rabbit_after, self.C["rabbit"]
         )
         self._draw_chromosome_section(
-            rab_panel.x + 10, rab_panel.y + 110,
+            rab_panel.x + 10, rab_panel.y + 140,
             rab_panel.w - 20,
             self.rabbit_chromo_after,
             self.C["rabbit"],
@@ -468,7 +468,7 @@ class YearEndScreen:
         self.screen.blit(a_val, (x + 76, y + 14))
 
         # Delta badge
-        badge = pygame.Rect(x, y + 50, 130, 22)
+        badge = pygame.Rect(x, y + 55, 140, 22)
         pygame.draw.rect(self.screen, bg_color, badge, border_radius=6)
         pygame.draw.rect(self.screen, delta_color, badge, 1, border_radius=6)
         delta_txt = self.font_tiny.render(
@@ -482,7 +482,7 @@ class YearEndScreen:
             sx = x + int(t * 120)
             trend = before + (after - before) * t
             norm = (trend - min(before, after)) / max(abs(change), 1)
-            sy = y + 88 - int(norm * 12)
+            sy = y + 98 - int(norm * 12)
             dot_c = _lerp_color(self.C["text_dim"], color, t)
             pygame.draw.circle(self.screen, dot_c, (sx, sy), 2)
 
@@ -507,7 +507,7 @@ class YearEndScreen:
 
         bar_w = w - 10
         bar_h = 8
-        spacing = 28
+        spacing = 42
         # Pick a gradient per bar
         colors = [
             (100, 220, 130), (220, 130, 80), (100, 180, 255),
@@ -531,8 +531,8 @@ class YearEndScreen:
                     pygame.Rect(x, by, fill_w, bar_h), border_radius=4
                 )
             pygame.draw.rect(self.screen, (60, 90, 70), bg_r, 1, border_radius=4)
-            lbl_t = self.font_tiny.render(f"{friendly}: {val:.2f}", True, self.C["text"])
-            self.screen.blit(lbl_t, (x, by - 12))
+            lbl_t = self.font_small.render(f"{friendly}: {val:.2f}", True, self.C["text"])
+            self.screen.blit(lbl_t, (x, by - 16))
             drawn += 1
 
     # ══════════════════════════════════════════════════════════════════════════

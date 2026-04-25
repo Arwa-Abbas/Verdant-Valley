@@ -13,7 +13,7 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='pygame')
 import sys
 import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
 import pygame
 import os
 import random
@@ -555,6 +555,14 @@ class Game:
         self.last_rabbit_fitness = 0
         self.last_fox_chromo = {}
         self.last_rabbit_chromo = {}
+        self.year_end_fox_fitness_before = 0
+        self.year_end_rabbit_fitness_before = 0
+        self.year_end_fox_chromo_before = {}
+        self.year_end_rabbit_chromo_before = {}
+        # Add these 2 lines to track previous year's fitness for comparison
+        self.prev_year_fox_fitness = 0
+        self.prev_year_rabbit_fitness = 0
+        
 
         # Screens
         self.menu = MainMenu(self.screen, self.music_manager)
@@ -599,6 +607,16 @@ class Game:
         self.last_rabbit_fitness = 0
         self.last_fox_chromo = {}
         self.last_rabbit_chromo = {}
+        self.year_fox_fitness = 0
+        self.year_rabbit_fitness = 0
+        # ADD these 4 lines
+        self.year_end_fox_fitness_before = 0
+        self.year_end_rabbit_fitness_before = 0
+        self.year_end_fox_chromo_before = {}
+        self.year_end_rabbit_chromo_before = {}
+        #Add these 2 lines to track previous year's fitness for comparison
+        self.prev_year_fox_fitness = 0
+        self.prev_year_rabbit_fitness = 0
 
         # Initialize game objects
         self.grid = Grid()
@@ -718,9 +736,13 @@ class Game:
             if name == "fox":
                 self.last_fox_fitness = animal.fitness
                 self.last_fox_chromo = animal.chromosome.copy()
+                self.year_end_fox_fitness_before = animal.fitness       
+                self.year_end_fox_chromo_before = animal.chromosome.copy()  
             else:
                 self.last_rabbit_fitness = animal.fitness
                 self.last_rabbit_chromo = animal.chromosome.copy()
+                self.year_end_rabbit_fitness_before = animal.fitness        
+                self.year_end_rabbit_chromo_before = animal.chromosome.copy()
 
         # Sort by fitness
         animals.sort(key=lambda x: x[1].fitness, reverse=True)
@@ -760,7 +782,33 @@ class Game:
         self.generation_count += 1
 
     def start_next_year(self):
-        """Start a new year with evolved animals."""
+
+        if self.animal_fox:
+            self.animal_fox.lifetime_crops = 0
+            self.animal_fox.lifetime_survival = 0
+            self.animal_fox.fitness = 0.0
+            
+        if self.animal_rabbit:
+            self.animal_rabbit.lifetime_crops = 0
+            self.animal_rabbit.lifetime_survival = 0
+            self.animal_rabbit.fitness = 0.0
+
+        # Save this year's fitness as next year's "before"
+        self.last_fox_fitness = self.animal_fox.fitness if self.animal_fox else 0
+        self.last_rabbit_fitness = self.animal_rabbit.fitness if self.animal_rabbit else 0
+        self.last_fox_chromo = self.animal_fox.chromosome.copy() if self.animal_fox else {}
+        self.last_rabbit_chromo = self.animal_rabbit.chromosome.copy() if self.animal_rabbit else {}
+
+        # Reset lifetime counters for new year tracking
+        if self.animal_fox:
+            self.animal_fox.lifetime_crops = 0
+            self.animal_fox.lifetime_survival = 0
+            self.animal_fox.fitness = 0.0
+        if self.animal_rabbit:
+            self.animal_rabbit.lifetime_crops = 0
+            self.animal_rabbit.lifetime_survival = 0
+            self.animal_rabbit.fitness = 0.0
+
         self.current_year += 1
         self.completed_seasons = 0
         self.game_tick = 0
@@ -1389,6 +1437,8 @@ class Game:
                             and self.season
                         ):
                             self.season.advance_manual(self.grid)
+                            if self.season.index == 3 and self.grid:
+                                self.grid.apply_winter_freeze()
 
                         # Plant button
                         if (
@@ -1540,14 +1590,15 @@ class Game:
                     if self.animal_rabbit and hasattr(self.animal_rabbit, "score"):
                         animal_score += self.animal_rabbit.score
 
-                    fox_fitness = self.animal_fox.fitness if self.animal_fox else 0
-                    rabbit_fitness = (
-                        self.animal_rabbit.fitness if self.animal_rabbit else 0
-                    )
-                    fox_chromo = self.animal_fox.chromosome if self.animal_fox else {}
-                    rabbit_chromo = (
-                        self.animal_rabbit.chromosome if self.animal_rabbit else {}
-                    )
+                    if self.animal_fox:
+                        self.animal_fox.update_fitness()
+                    if self.animal_rabbit:
+                        self.animal_rabbit.update_fitness()
+
+                    fox_fitness_this_year  = self.animal_fox.fitness if self.animal_fox else 0
+                    rab_fitness_this_year  = self.animal_rabbit.fitness if self.animal_rabbit else 0
+                    fox_chromo  = self.animal_fox.chromosome if self.animal_fox else {}
+                    rab_chromo  = self.animal_rabbit.chromosome if self.animal_rabbit else {}
 
                     self.end_screen = YearEndScreen(
                         self.screen,
@@ -1555,15 +1606,21 @@ class Game:
                         getattr(self.guard, "score", 0),
                         animal_score,
                         self.current_year,
-                        self.last_fox_fitness,
-                        self.last_rabbit_fitness,
-                        self.last_fox_chromo,
-                        self.last_rabbit_chromo,
-                        fox_fitness,
-                        rabbit_fitness,
+                        self.prev_year_fox_fitness,        # BEFORE = last year's score
+                        self.prev_year_rabbit_fitness,     # BEFORE = last year's score
+                        self.year_end_fox_chromo_before,
+                        self.year_end_rabbit_chromo_before,
+                        fox_fitness_this_year,             # AFTER = this year's score
+                        rab_fitness_this_year,
                         fox_chromo,
-                        rabbit_chromo,
+                        rab_chromo,
                     )
+                    # Store this year as next year's "before"
+                    self.prev_year_fox_fitness = fox_fitness_this_year
+                    self.prev_year_rabbit_fitness = rab_fitness_this_year
+                    self.year_end_fox_chromo_before = fox_chromo.copy() if fox_chromo else {}
+                    self.year_end_rabbit_chromo_before = rab_chromo.copy() if rab_chromo else {}
+
                     self.state = "END"
 
                 # Update agents if no popups active

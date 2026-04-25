@@ -151,7 +151,6 @@ def _get_tomato_carrot_sprites():
         TOMATO_CARROT_SPRITES = None
         return None
 
-
 sys.path.insert(
     0,
     os.path.dirname(
@@ -192,7 +191,6 @@ from utils.constants import (
     SEASON_TINTS,
 )
 from utils.helpers import grid_to_px, draw_rounded_rect
-
 
 # Asset loading
 
@@ -730,8 +728,9 @@ class Grid:
                 if (
                     season_index == 3
                     and t.type in (TILE_GRASS, TILE_FIELD, TILE_DIRT, TILE_MUD)
-                    and snow_count < 20
-                    and rng_snow.random() < 0.25
+                    and t.crop == CROP_NONE
+                    and snow_count < 40
+                    and rng_snow.random() < 0.5
                 ):
                     t._pre_snow_type = t.type
                     t.set_type(TILE_WINTER_SNOW)
@@ -795,15 +794,8 @@ class Grid:
                 if t.type == TILE_WATER:
                     pass
                 elif t.type == TILE_STONE:
-                    near_water = False
-                    for dc, dr in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                        neighbor = self.get(c + dc, r + dr)
-                        if neighbor is not None and neighbor.type == TILE_WATER:
-                            near_water = True
-                            break
-                    if near_water:
-                        t._pre_freeze_type = TILE_STONE
-                        t.set_type(TILE_SNOW_STONE)
+                    t._pre_freeze_type = TILE_STONE
+                    t.set_type(TILE_SNOW_STONE)
                 elif t.type in (TILE_FIELD, TILE_GRASS, TILE_DIRT):
                     if rng.random() < 0.35:
                         t._pre_freeze_type = t.type
