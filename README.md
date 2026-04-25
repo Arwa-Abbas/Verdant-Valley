@@ -8,6 +8,10 @@
 
 Verdant Valley is a grid-based farming simulation where autonomous AI agents (Farmer, Guard, Fox, Rabbit) interact in a dynamic environment. All decisions are driven by AI algorithms - no scripted behaviors.
 
+## 🎥 Demo Video
+
+▶️ [Watch Gameplay Demo](https://drive.google.com/file/d/1Fg56cz_M7o1Xy-g6didKkcbx34kCVzwk/view?usp=sharing)
+
 ## 🎮 Gameplay
 
 **Goal:** Harvest as many crops as possible while protecting them from animals.
